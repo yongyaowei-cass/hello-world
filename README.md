@@ -8,11 +8,11 @@ A minimal Python utility that greets a name.
 python greet.py Alice
 ```
 
-## Instalation
+## Installation
 
-No dependencies required. Python 3.8+ is suported.
+No dependencies required. Python 3.8+ is supported.
 
-## Runing tests
+## Running tests
 
 ```bash
 python -m pytest
