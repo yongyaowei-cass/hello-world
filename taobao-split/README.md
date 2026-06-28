@@ -1,22 +1,21 @@
 # Taobao Split
 
 A single-page tool for splitting a joint Taobao order between you and one
-friend, proportional to the value of the items each of you owns. Reads an
-order screenshot with Claude's vision API, then computes the friend's share
-of the actual amount paid (shipping, fees, GST, and discounts included
-automatically — see the design doc for why this works).
+friend, proportional to the value of the items each of you owns. You type in
+the order's line items and the final amount paid; it computes the friend's
+share of the actual amount paid (shipping, fees, GST, and discounts included
+automatically — see the design doc for why this works). No API key, no
+network calls, no cost.
 
 ## Usage
 
 1. Open the page (locally or deployed).
-2. Paste your Claude API key and click "Save key" (stored in your browser's
-   `localStorage`; never sent anywhere except directly to Anthropic's API).
-3. Upload a screenshot of the Taobao order.
-4. For each line item, set how many units belong to your friend.
-5. Read the computed split, or tap "Copy summary" to paste it to your friend.
-
-This is a single-user personal tool: only use it on a device you control,
-since your API key is stored unencrypted in the browser.
+2. Set the "Item currency" field to match your order (e.g. "CNY").
+3. For each item in the order, fill in its name, unit price, and quantity.
+   Click "Add item" for more rows, or "Remove" to delete a row.
+4. For each item, set how many units belong to your friend.
+5. Fill in the amount actually paid and its currency.
+6. Read the computed split, or tap "Copy summary" to paste it to your friend.
 
 ## Running locally
 
