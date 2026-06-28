@@ -1,0 +1,61 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  padding: 1rem;
+  max-width: 480px;
+  margin-inline: auto;
+}
+
+section {
+  margin-bottom: 1.25rem;
+}
+
+label {
+  display: block;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+input,
+button {
+  font-size: 1rem;
+  padding: 0.5rem;
+}
+
+input[type='password'],
+input[type='file'],
+input[type='number'] {
+  width: 100%;
+}
+
+button {
+  margin-top: 0.5rem;
+}
+
+.line-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.line-item .qty-input,
+.line-item .friend-units-input {
+  width: 4rem;
+}
+
+#status {
+  color: #b00;
+  min-height: 1.25rem;
+}
+
+#result {
+  font-weight: bold;
+  font-size: 1.1rem;
+}
