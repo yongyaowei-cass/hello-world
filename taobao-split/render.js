@@ -1,14 +1,23 @@
-export function renderLineItems(container, lineItems, friendUnits, onChange) {
+export function renderLineItems(container, lineItems, friendUnits, onChange, onRemove) {
   container.innerHTML = '';
 
   lineItems.forEach((item, index) => {
     const row = document.createElement('div');
     row.className = 'line-item';
 
-    const label = document.createElement('span');
-    // item.name comes from untrusted LLM-extracted image content — keep this
-    // as textContent (never innerHTML/template interpolation) to avoid XSS.
-    label.textContent = `${item.name} · ${item.unitPrice} ${item.currency} ×`;
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = 'Item name';
+    nameInput.className = 'item-name-input';
+    nameInput.value = item.name;
+
+    const priceInput = document.createElement('input');
+    priceInput.type = 'number';
+    priceInput.step = '0.01';
+    priceInput.min = '0';
+    priceInput.placeholder = 'Unit price';
+    priceInput.className = 'unit-price-input';
+    priceInput.value = String(item.unitPrice);
 
     const qtyInput = document.createElement('input');
     qtyInput.type = 'number';
@@ -26,6 +35,21 @@ export function renderLineItems(container, lineItems, friendUnits, onChange) {
     friendInput.className = 'friend-units-input';
     friendInput.value = String(friendUnits[index] ?? 0);
 
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-item-btn';
+    removeBtn.textContent = 'Remove';
+
+    nameInput.addEventListener('input', () => {
+      item.name = nameInput.value;
+      onChange();
+    });
+
+    priceInput.addEventListener('input', () => {
+      item.unitPrice = Number(priceInput.value) || 0;
+      onChange();
+    });
+
     qtyInput.addEventListener('input', () => {
       item.qty = Number(qtyInput.value) || 0;
       friendInput.max = String(item.qty);
@@ -37,7 +61,11 @@ export function renderLineItems(container, lineItems, friendUnits, onChange) {
       onChange();
     });
 
-    row.append(label, qtyInput, friendLabel, friendInput);
+    removeBtn.addEventListener('click', () => {
+      onRemove(index);
+    });
+
+    row.append(nameInput, priceInput, qtyInput, friendLabel, friendInput, removeBtn);
     container.appendChild(row);
   });
 }
