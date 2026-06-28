@@ -90,7 +90,7 @@ function describeError(error) {
     case 'friend-units-out-of-range':
       return "Friend's units cannot exceed the item quantity.";
     case 'zero-total-value':
-      return 'Total item value is zero — check the extracted prices.';
+      return 'Total item value is zero — check the unit prices and quantities.';
     default:
       return 'Could not compute split.';
   }
