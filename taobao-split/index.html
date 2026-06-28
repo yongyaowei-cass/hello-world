@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Taobao Split</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Taobao Split</h1>
+
+    <section id="key-section">
+      <label for="api-key-input">Claude API key</label>
+      <input id="api-key-input" type="password" placeholder="sk-ant-..." />
+      <button id="save-key-btn" type="button">Save key</button>
+    </section>
+
+    <section id="upload-section">
+      <label for="file-input">Order screenshot</label>
+      <input id="file-input" type="file" accept="image/*" />
+    </section>
+
+    <p id="status" role="status"></p>
+
+    <section id="line-items"></section>
+
+    <section id="total-section">
+      <label for="final-total-input">Amount paid</label>
+      <input id="final-total-input" type="number" step="0.01" />
+      <span id="final-total-currency"></span>
+    </section>
+
+    <section id="result"></section>
+
+    <button id="copy-btn" type="button" hidden>Copy summary</button>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
