@@ -26,8 +26,7 @@ button {
   padding: 0.5rem;
 }
 
-input[type='password'],
-input[type='file'],
+input[type='text'],
 input[type='number'] {
   width: 100%;
 }
@@ -45,9 +44,22 @@ button {
   border-bottom: 1px solid #ddd;
 }
 
+.line-item .item-name-input {
+  flex: 1 1 8rem;
+  width: auto;
+}
+
+.line-item .unit-price-input,
 .line-item .qty-input,
 .line-item .friend-units-input {
   width: 4rem;
+}
+
+.line-item .remove-item-btn {
+  margin-top: 0;
+  background: #fee;
+  border: 1px solid #b00;
+  color: #b00;
 }
 
 #status {

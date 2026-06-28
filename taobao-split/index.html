@@ -10,26 +10,23 @@
   <main>
     <h1>Taobao Split</h1>
 
-    <section id="key-section">
-      <label for="api-key-input">Claude API key</label>
-      <input id="api-key-input" type="password" placeholder="sk-ant-..." />
-      <button id="save-key-btn" type="button">Save key</button>
+    <section id="currency-section">
+      <label for="order-currency-input">Item currency</label>
+      <input id="order-currency-input" type="text" value="CNY" />
     </section>
-
-    <section id="upload-section">
-      <label for="file-input">Order screenshot</label>
-      <input id="file-input" type="file" accept="image/*" />
-    </section>
-
-    <p id="status" role="status"></p>
 
     <section id="line-items"></section>
+
+    <button id="add-item-btn" type="button">Add item</button>
 
     <section id="total-section">
       <label for="final-total-input">Amount paid</label>
       <input id="final-total-input" type="number" step="0.01" />
-      <span id="final-total-currency"></span>
+      <label for="final-total-currency-input">Paid currency</label>
+      <input id="final-total-currency-input" type="text" placeholder="e.g. SGD" />
     </section>
+
+    <p id="status" role="status"></p>
 
     <section id="result"></section>
 
