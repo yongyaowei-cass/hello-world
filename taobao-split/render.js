@@ -6,6 +6,8 @@ export function renderLineItems(container, lineItems, friendUnits, onChange) {
     row.className = 'line-item';
 
     const label = document.createElement('span');
+    // item.name comes from untrusted LLM-extracted image content — keep this
+    // as textContent (never innerHTML/template interpolation) to avoid XSS.
     label.textContent = `${item.name} · ${item.unitPrice} ${item.currency} ×`;
 
     const qtyInput = document.createElement('input');

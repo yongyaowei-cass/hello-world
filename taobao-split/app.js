@@ -40,7 +40,14 @@ fileInput.addEventListener('change', async () => {
   status.textContent = 'Reading screenshot...';
 
   const { base64, mediaType } = await fileToBase64(file);
-  const extracted = await callVisionApi({ imageBase64: base64, mediaType, apiKey });
+
+  let extracted;
+  try {
+    extracted = await callVisionApi({ imageBase64: base64, mediaType, apiKey });
+  } catch (err) {
+    status.textContent = "Couldn't read this screenshot, try a clearer crop.";
+    return;
+  }
 
   if (extracted.error) {
     status.textContent = "Couldn't read this screenshot, try a clearer crop.";

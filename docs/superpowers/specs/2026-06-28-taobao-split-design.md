@@ -81,7 +81,7 @@ Worked example (from the user's sample order):
 - Friend's items: 4 × ¥78.65 = ¥314.60
 - Total items: 4×¥49.16 + 8×¥78.65 = ¥825.84
 - Friend's share: 314.60 / 825.84 ≈ 38.1%
-- Friend owes: 0.381 × SGD 180.65 ≈ **SGD 68.83**
+- Friend owes: 0.381 × SGD 180.65 ≈ **SGD 68.82**
 
 ## Ownership & correction UI
 

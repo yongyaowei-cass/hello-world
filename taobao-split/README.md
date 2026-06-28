@@ -39,7 +39,7 @@ Then open the printed URL in a browser.
 From the repository root:
 
 ```
-node --test taobao-split/
+node --test taobao-split/*.test.js
 ```
 
 ## Deploying

@@ -134,7 +134,7 @@ test('friend units exceeding quantity is an error', () => {
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `node --test taobao-split/`
+Run: `node --test taobao-split/*.test.js`
 Expected: FAIL — `split.js` does not exist yet (`Cannot find module './split.js'`).
 
 - [ ] **Step 4: Write the implementation**
@@ -176,7 +176,7 @@ export function computeSplit({ lineItems, friendUnits, finalTotal }) {
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `node --test taobao-split/`
+Run: `node --test taobao-split/*.test.js`
 Expected: PASS — all 6 tests green.
 
 - [ ] **Step 6: Commit**
@@ -270,7 +270,7 @@ test('missing finalTotal is an error', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `node --test taobao-split/`
+Run: `node --test taobao-split/*.test.js`
 Expected: FAIL — `extraction.js` does not exist yet.
 
 - [ ] **Step 3: Write the implementation**
@@ -367,7 +367,7 @@ export async function callVisionApi({ imageBase64, mediaType, apiKey }) {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `node --test taobao-split/`
+Run: `node --test taobao-split/*.test.js`
 Expected: PASS — all tests from Task 1 and Task 2 green (12 total).
 
 - [ ] **Step 5: Commit**
@@ -432,7 +432,7 @@ test('clears a stored key', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `node --test taobao-split/`
+Run: `node --test taobao-split/*.test.js`
 Expected: FAIL — `apiKey.js` does not exist yet.
 
 - [ ] **Step 3: Write the implementation**
@@ -457,7 +457,7 @@ export function clearStoredApiKey(storage) {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `node --test taobao-split/`
+Run: `node --test taobao-split/*.test.js`
 Expected: PASS — all tests from Tasks 1–3 green (15 total).
 
 - [ ] **Step 5: Commit**
@@ -809,7 +809,7 @@ function fileToBase64(file) {
 
 - [ ] **Step 3: Run the unit test suite to confirm no regressions**
 
-Run: `node --test taobao-split/`
+Run: `node --test taobao-split/*.test.js`
 Expected: PASS — same 15 tests as after Task 3 (this task adds no new unit tests; DOM-dependent code is verified manually next).
 
 - [ ] **Step 4: Manually verify the full flow in a browser**
@@ -888,7 +888,7 @@ Then open the printed URL in a browser.
 From the repository root:
 
 ```
-node --test taobao-split/
+node --test taobao-split/*.test.js
 ```
 
 ## Deploying
