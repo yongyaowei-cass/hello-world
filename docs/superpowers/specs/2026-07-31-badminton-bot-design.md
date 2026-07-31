@@ -99,10 +99,15 @@ before flipping to production secrets):
 1. Poll posts on schedule with the correct 4 options.
 2. Watcher correctly tallies votes per day, including a "Both" vote counting
    toward both days.
-3. Trigger fires exactly once per day when the threshold is reached (does
-   not re-fire on subsequent runs).
-4. A real-shaped SUPPLY listing posted after the poll, matching the
-   triggered day, gets posted to the test friends' group.
+3. A day is marked triggered exactly once when the threshold is reached, but
+   **matching keeps running on every subsequent watch-window run** — post a
+   new matching listing several runs *after* the trigger fired and confirm
+   it still gets found and posted (this is the behavior that was corrected
+   after the final design review; do not accept a pass on "triggers once"
+   alone).
+4. A real-shaped SUPPLY listing posted after the poll, matching a triggered
+   day, gets posted to the test friends' group — both immediately at trigger
+   time and on a later run per criterion 3.
 5. A DEMAND ("looking for") listing is correctly excluded.
 6. A listing already posted is not posted again on a later run, even if it
    also matches the other triggered day.
@@ -140,20 +145,35 @@ fixed year-round.
 
 ## Trigger & matching logic
 
-Each watcher run, for each day (Saturday, Sunday) not yet marked `triggered`
-in `state.json`:
+**Revised after final-review feedback**: the first implementation had
+`triggered` gate the entire scan-and-post step, meaning a day was only ever
+scanned once — at the exact run where its vote count crossed the threshold.
+Traced against a realistic timeline (votes usually cross Thursday/Friday,
+listings often get posted later, through the weekend), this meant the bot
+would typically find nothing. `triggered` now means "the day has started
+being watched," not "the day has been fully handled" — matching continues on
+every run for a triggered day, and `posted_message_ids` (which already
+existed for a different reason) is what prevents duplicate posts.
+
+Each watcher run, for each day (Saturday, Sunday):
 
 1. If that day's vote count has reached **4**, mark it `triggered` in
-   `state.json`.
-2. Userbot fetches listings-group messages with `date >= poll_post_timestamp`
-   (this is the scoping rule for "this weekend's" listings — message
-   recency since the Thursday poll, not exact date parsing, per the user's
-   call: simpler and matches how the group actually behaves).
+   `state.json` (idempotent — stays `true` once set).
+2. For each day currently `triggered` (this run's newly-triggered days and
+   any already-triggered from a previous run), userbot fetches
+   listings-group messages with `date >= poll_post_timestamp` (this is the
+   scoping rule for "this weekend's" listings — message recency since the
+   Thursday poll, not exact date parsing, per the user's call: simpler and
+   matches how the group actually behaves).
 3. Run each message through `parser.py`; keep messages classified `SUPPLY`
-   whose extracted day matches the triggered day.
+   whose extracted day matches that triggered day.
 4. For each match not already in `state.json`'s `posted_message_ids` set,
    post it to the friends' group and add its message ID to
    `posted_message_ids`.
+
+This means a triggered day is re-scanned every ~15 minutes for the rest of
+the watch window, not just once — new listings posted after the trigger
+moment are still caught.
 
 **Dedup is per-message, globally for the week**: once a listing message has
 been posted (for either day), it is never posted again that week — even if
@@ -162,7 +182,10 @@ already-posted listings (out of scope for v1); if a listing changes or is
 pulled after posting, that's handled socially in chat, not by the bot.
 
 State resets weekly: a new poll ID and fresh `triggered` / `posted_message_ids`
-state begin each Thursday when `post-poll.yml` runs.
+state begin each Thursday when `post-poll.yml` runs. If a Thursday poll post
+ever fails to run, the watcher guards against running indefinitely against a
+stale poll: it no-ops if the active poll's `poll_posted_at` is more than 7
+days old, rather than continuing to scan against a week-old cutoff.
 
 ## `state.json` schema
 
