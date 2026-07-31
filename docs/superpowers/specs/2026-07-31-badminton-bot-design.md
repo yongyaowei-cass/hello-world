@@ -70,6 +70,44 @@ at the end of each run.
 - `TELEGRAM_USERBOT_SESSION` — generated once locally via Telethon, then
   stored as a secret (the sensitive one — equivalent to a personal login
   session)
+- `VOTE_THRESHOLD` — optional, defaults to `4` if unset. Lets UAT run with a
+  lower threshold (see Staging & UAT below) without a code change.
+
+## Staging & UAT
+
+Real friends'/listings groups are never touched until UAT passes. Same code
+and workflows run in both staging and production — only two secrets differ:
+
+- **Staging**: `FRIENDS_GROUP_CHAT_ID` / `LISTINGS_GROUP_CHAT_ID` point at two
+  new, throwaway Telegram groups the user creates and controls (the userbot
+  account just joins the test listings group directly — no permission issue
+  since it's a brand-new group). `VOTE_THRESHOLD` is set low (e.g. `1` or
+  `2`) so the trigger can be exercised solo or with a couple of people
+  helping test, without needing 4 real voters. Test "letting go" messages are
+  posted by hand into the test listings group to exercise matching.
+- **Launch**: once UAT passes (poll posts correctly, votes are counted
+  correctly, the match trigger fires at the configured threshold, the parser
+  correctly matches/excludes real-shaped messages, and matches post to the
+  test friends' group with no duplicates), the user edits
+  `FRIENDS_GROUP_CHAT_ID` / `LISTINGS_GROUP_CHAT_ID` to the real group IDs
+  and removes (or sets to `4`) `VOTE_THRESHOLD`. That secret edit is the
+  entire launch step — no code or workflow changes.
+
+UAT acceptance criteria (to be exercised manually, at least once end-to-end,
+before flipping to production secrets):
+
+1. Poll posts on schedule with the correct 4 options.
+2. Watcher correctly tallies votes per day, including a "Both" vote counting
+   toward both days.
+3. Trigger fires exactly once per day when the threshold is reached (does
+   not re-fire on subsequent runs).
+4. A real-shaped SUPPLY listing posted after the poll, matching the
+   triggered day, gets posted to the test friends' group.
+5. A DEMAND ("looking for") listing is correctly excluded.
+6. A listing already posted is not posted again on a later run, even if it
+   also matches the other triggered day.
+7. A listing posted *before* the poll (i.e. predating `poll_posted_at`) is
+   correctly excluded from matching.
 
 ## Schedule & timezone
 
@@ -194,6 +232,9 @@ if failures turn out to be noisy or silent-failure-prone in practice.
   crossing 4, re-run not re-triggering, message ID dedup).
 - `poll.py` and `watcher.py`'s Telegram/Telethon calls are mocked in tests —
   no live API dependency for the test suite.
+- These are automated unit tests, separate from the manual end-to-end UAT
+  pass against the staging groups described above — unit tests must pass
+  before UAT begins, and UAT must pass before launch.
 
 ## Open assumptions to revisit later
 
