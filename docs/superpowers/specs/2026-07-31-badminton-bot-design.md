@@ -259,6 +259,31 @@ if failures turn out to be noisy or silent-failure-prone in practice.
   pass against the staging groups described above — unit tests must pass
   before UAT begins, and UAT must pass before launch.
 
+## Listings group uses Telegram Topics (discovered during UAT setup)
+
+The real production listings group has Telegram's "Topics/Forum mode"
+enabled — 11 named sub-threads (e.g. "Court transfer", "Looking for Games",
+"General"), confirmed via live diagnostic script against the actual group.
+A plain, unscoped message-history fetch (`client.iter_messages(chat_id)`)
+only sees the bare default stream and silently misses everything posted
+inside a named topic — including "Court transfer", almost certainly where
+real listings are posted. This would have made the bot find nothing in
+production despite passing UAT against a topic-less staging group.
+
+`listings_client.py` now enumerates the group's topics via
+`GetForumTopicsRequest` (`telethon.tl.functions.messages`, not `channels` —
+confirmed by introspecting the installed Telethon 1.44.0's actual module
+layout, not from documentation, which was misleading on this point) and
+scans each topic individually via `iter_messages(chat_id, reply_to=topic_id)`,
+falling back to the original plain scan for groups without Topics enabled
+(so the staging group still works if it isn't set up with topics).
+
+**Implication for UAT**: if the staging listings group doesn't have Topics
+enabled, UAT cannot exercise this path. Worth either enabling Topics on the
+staging group to mirror production, or treating this as verified by the
+live diagnostic script already run against the real group rather than by
+the formal UAT checklist.
+
 ## Open assumptions to revisit later
 
 - "This week's listing" is scoped by message recency since the Thursday poll
