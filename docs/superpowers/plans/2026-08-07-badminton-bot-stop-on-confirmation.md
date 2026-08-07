@@ -1216,7 +1216,9 @@ git commit -m "feat: confirm/unconfirm via reply, unified update loop, confirmed
 
 ### Task 4: Manual production state migration (no code)
 
-This is the one non-code task in this plan — it exists because the live `state.json` in the production repo predates this plan's schema change, and `load_state` does no automatic migration (deliberately, per the design's "no automatic migration code" YAGNI call — this transition happens exactly once).
+This is the one non-code task in this plan — it exists because the live `state.json` in the production repo predates this plan's schema change, and `load_state` does no *shape*-migration for legacy structures (deliberately, per the design's "no automatic migration code" YAGNI call — this transition happens exactly once). It does now (as of Task 3's fix round) backfill any entirely-*missing* top-level key from `DEFAULT_STATE` as a safety net, but that's not a substitute for this deliberate, correct migration.
+
+**Schema addition found during Task 3's review**: beyond `confirmed` and day-keyed `posted_message_ids`, there's a third new field — `posted_match_message_ids` (day-keyed, tracks the bot's own outbound match-post IDs in the friends' chat, separate from `posted_message_ids` which tracks listings-group source IDs). There's no way to retroactively populate this for matches already posted before this feature existed — Telegram doesn't expose "which message ID did I send for this listing" after the fact without re-deriving it some other way, and this migration doesn't need to. It migrates as empty for both days; the practical effect is that `/confirmed`/`/unconfirmed` only work on matches posted *after* this migration lands, not on the 48 already-posted Sunday matches from before it. That's an acceptable one-time limitation — worth mentioning to the user, not a blocker.
 
 **Files:** none (direct edit of the live `state.json` on `master`, same pattern as the earlier production state recovery already done once in this repo's history).
 
@@ -1255,9 +1257,12 @@ This is the one non-code task in this plan — it exists because the live `state
   "posted_message_ids": {
     "saturday": [],
     "sunday": [202741, 202697, 202672, 202649, 202588, 202529, 202528, 202476, 202467, 202465, 202441, 202371, 202290, 202262, 202240, 202235, 202208, 202139, 202052, 202039, 201981, 201969, 201940, 202772, 202766, 203186, 203155, 203151, 203143, 203129, 203056, 203036, 202990, 202972, 202971, 202953, 202856, 202836, 202826, 202774, 203259, 203252, 203249, 203242, 203313, 203365, 203364, 203356]
-  }
+  },
+  "posted_match_message_ids": {"saturday": [], "sunday": []}
 }
 ```
+
+`posted_match_message_ids` starts empty for both days (see the note above — it can't be reconstructed retroactively for matches already posted before this migration).
 
 - [ ] **Step 4: Write the file, commit, and push**
 ```bash
