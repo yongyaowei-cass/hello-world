@@ -12,10 +12,12 @@ this needs an explicit, manual signal from a friend.
 ## Scope
 
 - Let anyone in the friends' group reply `/confirmed` to a posted match
-  message to stop all further scanning/posting for that match's day.
+  message to stop all further scanning/posting for that match's day, and
+  reply `/unconfirmed` to undo an accidental confirmation and resume
+  scanning.
 - Out of scope: automatic confirmation detection, restricting who can
-  confirm, confirming via anything other than a reply (buttons, other
-  commands), un-confirming / reopening a day once stopped.
+  confirm/unconfirm, confirming via anything other than a reply (buttons,
+  other commands).
 
 ## Design
 
@@ -24,9 +26,9 @@ this needs an explicit, manual signal from a friend.
 The bot already polls `getUpdates` each run for vote-counting. This is
 extended to also watch `"message"` updates in the friends' chat: a `message`
 update whose `reply_to_message.message_id` is one of the bot's own posted
-match IDs, and whose text (trimmed, case-insensitive) is `/confirmed`.
-`telegram_bot.get_updates`'s `allowed_updates` filter widens from `["poll"]`
-to `["poll", "message"]`.
+match IDs, and whose text (trimmed, case-insensitive) is `/confirmed` or
+`/unconfirmed`. `telegram_bot.get_updates`'s `allowed_updates` filter widens
+from `["poll"]` to `["poll", "message"]`.
 
 **Single unified pass, not two loops**: vote-counting and confirmation
 detection both consume the same `get_updates()` result. Rather than two
@@ -68,17 +70,35 @@ for that run — not just the posting step. This mirrors the exact "avoid an
 unnecessary Telethon fetch" fix already made once before for the doubled-fetch
 issue in the Topics work.
 
+### Undoing a confirmation
+
+Replying `/unconfirmed` to any of the bot's posted matches for a day that's
+currently `confirmed` sets that day's `confirmed` flag back to `false`,
+resuming normal scanning on the next run (subject to the same `triggered`/
+vote-threshold gate as before — since the day was already triggered, scanning
+resumes immediately, it doesn't need to re-cross the vote threshold). It
+doesn't need to be a reply to the *specific* match that was originally
+confirmed — any match already known for that day (i.e. present in that day's
+`posted_message_ids` list) resolves to the same day and works the same way,
+since confirmation is a per-day flag, not a per-message one.
+
+**Dedup still applies going forward**: unconfirming does not retroactively
+re-post listings that were already found and posted before the day was
+confirmed (they're still in `posted_message_ids`, still deduped) — it only
+resumes scanning for *new* listings from that point on, same as how
+`triggered` + continuous scanning already works for a never-confirmed day.
+
 ### Acknowledgment
 
-When a confirmation is processed, the bot replies in the same chat (e.g.
-"Got it — stopped searching for Sunday courts 🏸") and — **critically** —
+When a confirmation or un-confirmation is processed, the bot replies in the
+same chat (e.g. "Got it — stopped searching for Sunday courts 🏸" /
+"Got it — resumed searching for Sunday courts 🏸") and — **critically** —
 saves state immediately after handling that single update, not only at the
 end of the run. This matches the existing incremental-save discipline
 already used for match-posting (added after a real production incident):
 without it, a crash between sending the acknowledgment and the run's final
 `save_state` would leave `last_update_id` unadvanced, causing the same
-confirmation reply to be reprocessed and a duplicate acknowledgment sent on
-the next run.
+reply to be reprocessed and a duplicate acknowledgment sent on the next run.
 
 ### Edge cases
 
@@ -86,12 +106,15 @@ the next run.
   no-op.
 - `/confirmed` reply to an already-confirmed day's match: idempotent no-op
   (already `true`, nothing further happens, no duplicate acknowledgment).
+- `/unconfirmed` reply to a day that isn't currently confirmed: idempotent
+  no-op, same reasoning.
 - Interaction with the pending "matches in a dedicated Topic" feature: works
   identically whether matches post to the main chat or a topic — replies
   within a topic still carry the same `reply_to_message` structure.
-- Anyone in the friends' group can confirm — no restriction to a specific
-  person (e.g. not limited to whoever the bot thinks "claimed" it), matching
-  the trusted-small-group nature of this bot.
+- Anyone in the friends' group can confirm or unconfirm — no restriction to
+  a specific person, matching the trusted-small-group nature of this bot
+  (accidental confirmations are expected to be self-corrected by whoever
+  notices, not gated behind a permission check).
 
 ## Testing
 
@@ -101,23 +124,21 @@ the next run.
   update and a confirmation-reply update in the same batch are both handled
   correctly in one call; a confirmed day is excluded from
   `saturday_active`/`sunday_active` and no fetch happens when both days are
-  confirmed; state is saved immediately after processing a confirmation
-  (not only at the end of `main()`); a reply to an unrelated message is a
-  no-op; a duplicate `/confirmed` reply to an already-confirmed day is a
-  no-op with no duplicate acknowledgment.
+  confirmed; state is saved immediately after processing a confirmation or
+  un-confirmation (not only at the end of `main()`); a reply to an unrelated
+  message is a no-op; a duplicate `/confirmed` reply to an already-confirmed
+  day is a no-op with no duplicate acknowledgment; `/unconfirmed` correctly
+  resumes scanning without re-posting already-posted listings; `/unconfirmed`
+  on a non-confirmed day is a no-op.
 - `telegram_bot.py`: test that `get_updates` requests `allowed_updates:
   ["poll", "message"]`.
 - Manual verification: deployed straight to production per the pattern
   already established for this bot's other changes — the user will confirm
   live that replying `/confirmed` to a real match actually stops further
-  matches for that day.
+  matches for that day, and that `/unconfirmed` afterward resumes it.
 
 ## Open assumptions to revisit later
 
-- No un-confirm / reopen mechanism — if someone confirms by mistake, the
-  only recovery today would be a manual state.json edit (same as the
-  poll-deletion recovery done once already). Deliberately out of scope for
-  v1; revisit if mis-confirmation turns out to be a real occurrence.
-- `/confirmed` is a fixed, hardcoded keyword (no synonyms), matching how
-  `POLL_QUESTION`/`POLL_OPTIONS` are already hardcoded constants in
-  `poll.py` rather than configurable.
+- `/confirmed`/`/unconfirmed` are fixed, hardcoded keywords (no synonyms),
+  matching how `POLL_QUESTION`/`POLL_OPTIONS` are already hardcoded
+  constants in `poll.py` rather than configurable.
