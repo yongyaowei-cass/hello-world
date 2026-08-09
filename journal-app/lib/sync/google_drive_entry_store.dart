@@ -13,28 +13,31 @@ class GoogleDriveEntryStore implements DriveEntryStore {
 
   final drive.DriveApi _api;
 
+  Future<List<drive.File>> _listAllEntryFiles() async {
+    final files = <drive.File>[];
+    String? pageToken;
+    do {
+      final list = await _api.files.list(
+        spaces: 'appDataFolder',
+        $fields: 'nextPageToken, files(id, name, modifiedTime)',
+        q: "name contains 'entry_'",
+        pageToken: pageToken,
+      );
+      files.addAll(list.files ?? const <drive.File>[]);
+      pageToken = list.nextPageToken;
+    } while (pageToken != null);
+    return files;
+  }
+
   Future<Map<String, String>> _entryFileIdsByEntryId() async {
-    final list = await _api.files.list(
-      spaces: 'appDataFolder',
-      $fields: 'files(id, name, modifiedTime)',
-      q: "name contains 'entry_'",
-    );
-    return {
-      for (final f in list.files ?? const <drive.File>[])
-        parseEntryMeta(f).id: f.id!,
-    };
+    final files = await _listAllEntryFiles();
+    return {for (final f in files) parseEntryMeta(f).id: f.id!};
   }
 
   @override
   Future<List<RemoteEntryMeta>> listEntryMetas() async {
-    final list = await _api.files.list(
-      spaces: 'appDataFolder',
-      $fields: 'files(id, name, modifiedTime)',
-      q: "name contains 'entry_'",
-    );
-    return [
-      for (final f in list.files ?? const <drive.File>[]) parseEntryMeta(f),
-    ];
+    final files = await _listAllEntryFiles();
+    return [for (final f in files) parseEntryMeta(f)];
   }
 
   @override
