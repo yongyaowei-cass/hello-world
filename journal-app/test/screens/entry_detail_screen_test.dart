@@ -123,8 +123,9 @@ void main() {
     await tester.runAsync(() async {
       await tester.tap(find.text('Reflect'));
       var attempts = 0;
-      while (repo.getById('e1')!.aiReflectionQuestion == null && attempts < 100) {
+      while (find.text('What made today feel worth writing about?').evaluate().isEmpty && attempts < 100) {
         await Future.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
         attempts++;
       }
     });
