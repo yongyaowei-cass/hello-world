@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -84,5 +85,35 @@ void main() {
     await tester.tap(find.text('Tap me'));
 
     expect(opened?.id, 'e1');
+  });
+
+  testWidgets('shows a synced icon when syncStatus is synced', (tester) async {
+    final status = ValueNotifier(SyncStatus.synced);
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryListScreen(
+        repository: repo,
+        onCreateEntry: () {},
+        onOpenEntry: (_) {},
+        syncStatus: status,
+      ),
+    ));
+
+    expect(find.byIcon(Icons.cloud_done), findsOneWidget);
+  });
+
+  testWidgets('shows an offline icon when syncStatus is offline', (tester) async {
+    final status = ValueNotifier(SyncStatus.offline);
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryListScreen(
+        repository: repo,
+        onCreateEntry: () {},
+        onOpenEntry: (_) {},
+        syncStatus: status,
+      ),
+    ));
+
+    expect(find.byIcon(Icons.cloud_off), findsOneWidget);
   });
 }

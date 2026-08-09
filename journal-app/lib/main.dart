@@ -1,122 +1,121 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:hive_flutter/hive_flutter.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'ai/gemini_reflection_service.dart';
+import 'data/entry_repository.dart';
+import 'data/photo_repository.dart';
+import 'models/journal_entry.dart';
+import 'screens/entry_detail_screen.dart';
+import 'screens/entry_editor_screen.dart';
+import 'screens/entry_list_screen.dart';
+import 'screens/sign_in_screen.dart';
+import 'sync/auth_service.dart';
+import 'sync/google_drive_entry_store.dart';
+import 'sync/sync_service.dart';
+
+// Replace with a real key restricted in Google Cloud Console (see spec: Architecture).
+const _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  final entryRepository = await EntryRepository.open();
+  await PhotoRepository.open();
+  runApp(JournalApp(entryRepository: entryRepository));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class JournalApp extends StatefulWidget {
+  const JournalApp({super.key, required this.entryRepository});
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  final EntryRepository entryRepository;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<JournalApp> createState() => _JournalAppState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _JournalAppState extends State<JournalApp> {
+  final _authService = AuthService();
+  final _syncService = SyncService();
+  final _syncStatus = ValueNotifier(SyncStatus.offline);
+  GeminiReflectionService? _reflectionService;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  @override
+  void initState() {
+    super.initState();
+    if (_geminiApiKey.isNotEmpty) {
+      _reflectionService = GeminiReflectionService(apiKey: _geminiApiKey);
+    }
+    Connectivity().onConnectivityChanged.listen((result) {
+      if (!result.contains(ConnectivityResult.none)) {
+        _trySync();
+      }
     });
   }
 
+  Future<void> _trySync() async {
+    final account = _authService.currentUser;
+    if (account == null) return;
+    final authClient = await _authService.authenticatedClient();
+    if (authClient == null) return;
+    _syncStatus.value = SyncStatus.syncing;
+    final store = GoogleDriveEntryStore(drive.DriveApi(authClient));
+    await _syncService.sync(widget.entryRepository, store);
+    _syncStatus.value = SyncStatus.synced;
+  }
+
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    return MaterialApp(
+      title: 'Journal',
+      home: SignInScreen(
+        onSignIn: () async {
+          await _authService.signIn();
+          await _trySync();
+          if (mounted) _openList(context);
+        },
+        onSkip: () => _openList(context),
       ),
     );
+  }
+
+  void _openList(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (context) => EntryListScreen(
+        repository: widget.entryRepository,
+        onCreateEntry: () => _openEditor(context, null),
+        onOpenEntry: (entry) => _openDetail(context, entry),
+        syncStatus: _syncStatus,
+      ),
+    ));
+  }
+
+  void _openEditor(BuildContext context, JournalEntry? existing) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (context) => EntryEditorScreen(
+        repository: widget.entryRepository,
+        existingEntry: existing,
+        onSaved: (entry) {
+          _trySync();
+          Navigator.of(context).pop();
+        },
+      ),
+    ));
+  }
+
+  void _openDetail(BuildContext context, JournalEntry entry) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (context) => EntryDetailScreen(
+        repository: widget.entryRepository,
+        entry: entry,
+        reflectionService: _reflectionService,
+        onEdit: (e) => _openEditor(context, e),
+        onDeleted: () {
+          _trySync();
+          Navigator.of(context).pop();
+        },
+      ),
+    ));
   }
 }
