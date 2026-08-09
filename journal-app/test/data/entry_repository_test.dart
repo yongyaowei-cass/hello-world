@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:journal_app/data/entry_repository.dart';
@@ -67,5 +68,11 @@ void main() {
   test('softDelete on a missing id is a no-op', () async {
     await repo.softDelete('does-not-exist');
     expect(repo.getAllIncludingDeleted(), isEmpty);
+  });
+
+  test('listenable() returns a ValueListenable without cast errors', () {
+    final listenable = repo.listenable();
+    expect(listenable, isNotNull);
+    expect(listenable, isA<ValueListenable<Box<Map>>>());
   });
 }

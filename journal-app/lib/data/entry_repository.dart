@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../models/journal_entry.dart';
 
 class EntryRepository {
@@ -34,5 +34,5 @@ class EntryRepository {
     await save(existing.copyWith(deleted: true, updatedAt: DateTime.now()));
   }
 
-  ValueListenable<Box<Map>> listenable() => _box as ValueListenable<Box<Map>>;
+  ValueListenable<Box<Map>> listenable() => _box.listenable();
 }
