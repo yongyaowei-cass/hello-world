@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:journal_app/ai/gemini_reflection_service.dart';
 import 'package:journal_app/data/entry_repository.dart';
 import 'package:journal_app/models/journal_entry.dart';
 import 'package:journal_app/screens/entry_detail_screen.dart';
@@ -85,5 +89,61 @@ void main() {
 
     expect(deleted, isTrue);
     expect(repo.getById('e1')!.deleted, isTrue);
+  });
+
+  testWidgets('tapping Reflect calls Gemini and displays the question', (tester) async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode({
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {'text': 'What made today feel worth writing about?'}
+                ]
+              }
+            }
+          ]
+        }),
+        200,
+      );
+    });
+    final reflectionService = GeminiReflectionService(apiKey: 'test-key', httpClient: client);
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryDetailScreen(
+        repository: repo,
+        entry: entry,
+        onEdit: (_) {},
+        onDeleted: () {},
+        reflectionService: reflectionService,
+      ),
+    ));
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Reflect'));
+      var attempts = 0;
+      while (repo.getById('e1')!.aiReflectionQuestion == null && attempts < 100) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        attempts++;
+      }
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('What made today feel worth writing about?'), findsOneWidget);
+    expect(repo.getById('e1')!.aiReflectionQuestion, 'What made today feel worth writing about?');
+  });
+
+  testWidgets('Reflect button is hidden when no reflectionService is provided', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: EntryDetailScreen(
+        repository: repo,
+        entry: entry,
+        onEdit: (_) {},
+        onDeleted: () {},
+      ),
+    ));
+
+    expect(find.text('Reflect'), findsNothing);
   });
 }
