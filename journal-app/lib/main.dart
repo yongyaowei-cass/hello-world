@@ -22,14 +22,15 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   final entryRepository = await EntryRepository.open();
-  await PhotoRepository.open();
-  runApp(JournalApp(entryRepository: entryRepository));
+  final photoRepository = await PhotoRepository.open();
+  runApp(JournalApp(entryRepository: entryRepository, photoRepository: photoRepository));
 }
 
 class JournalApp extends StatefulWidget {
-  const JournalApp({super.key, required this.entryRepository});
+  const JournalApp({super.key, required this.entryRepository, required this.photoRepository});
 
   final EntryRepository entryRepository;
+  final PhotoRepository photoRepository;
 
   @override
   State<JournalApp> createState() => _JournalAppState();
@@ -97,6 +98,7 @@ class _JournalAppState extends State<JournalApp> {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (context) => EntryEditorScreen(
         repository: widget.entryRepository,
+        photoRepository: widget.photoRepository,
         existingEntry: existing,
         onSaved: (entry) {
           _trySync();
@@ -110,6 +112,7 @@ class _JournalAppState extends State<JournalApp> {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (context) => EntryDetailScreen(
         repository: widget.entryRepository,
+        photoRepository: widget.photoRepository,
         entry: entry,
         reflectionService: _reflectionService,
         onEdit: (e) => _openEditor(context, e),

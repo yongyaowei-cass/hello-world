@@ -7,18 +7,22 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:journal_app/ai/gemini_reflection_service.dart';
 import 'package:journal_app/data/entry_repository.dart';
+import 'package:journal_app/data/photo_repository.dart';
 import 'package:journal_app/models/journal_entry.dart';
+import 'package:journal_app/models/photo_asset.dart';
 import 'package:journal_app/screens/entry_detail_screen.dart';
 
 void main() {
   late Directory tempDir;
   late EntryRepository repo;
+  late PhotoRepository photoRepo;
   late JournalEntry entry;
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('entry_detail_test');
     Hive.init(tempDir.path);
     repo = await EntryRepository.open();
+    photoRepo = await PhotoRepository.open();
     entry = JournalEntry(
       id: 'e1',
       createdAt: DateTime.utc(2026, 8, 9),
@@ -39,6 +43,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: EntryDetailScreen(
         repository: repo,
+        photoRepository: photoRepo,
         entry: entry,
         onEdit: (_) {},
         onDeleted: () {},
@@ -56,6 +61,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: EntryDetailScreen(
         repository: repo,
+        photoRepository: photoRepo,
         entry: entry,
         onEdit: (e) => editTarget = e,
         onDeleted: () {},
@@ -72,6 +78,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: EntryDetailScreen(
         repository: repo,
+        photoRepository: photoRepo,
         entry: entry,
         onEdit: (_) {},
         onDeleted: () => deleted = true,
@@ -113,6 +120,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: EntryDetailScreen(
         repository: repo,
+        photoRepository: photoRepo,
         entry: entry,
         onEdit: (_) {},
         onDeleted: () {},
@@ -139,6 +147,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: EntryDetailScreen(
         repository: repo,
+        photoRepository: photoRepo,
         entry: entry,
         onEdit: (_) {},
         onDeleted: () {},
@@ -146,5 +155,34 @@ void main() {
     ));
 
     expect(find.text('Reflect'), findsNothing);
+  });
+
+  testWidgets('shows a thumbnail for each attached photo', (tester) async {
+    final entryWithPhoto = entry.copyWith(photoIds: ['p1']);
+    // Real Hive I/O in a testWidgets body must run inside runAsync, per the
+    // pattern established elsewhere in this file/suite (e.g. the delete and
+    // Reflect tests): fake-async zones don't drive real dart:io/Hive
+    // completions, so unwrapped awaits here can hang indefinitely.
+    await tester.runAsync(() async {
+      await photoRepo.save(PhotoAsset(
+        id: 'p1',
+        entryId: 'e1',
+        createdAt: DateTime.utc(2026, 8, 9),
+        localPath: '/tmp/does-not-need-to-exist.jpg',
+      ));
+      await repo.save(entryWithPhoto);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryDetailScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        entry: entryWithPhoto,
+        onEdit: (_) {},
+        onDeleted: () {},
+      ),
+    ));
+
+    expect(find.byKey(const Key('photo-p1')), findsOneWidget);
   });
 }

@@ -2,18 +2,22 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:journal_app/data/entry_repository.dart';
+import 'package:journal_app/data/photo_repository.dart';
 import 'package:journal_app/models/journal_entry.dart';
 import 'package:journal_app/screens/entry_editor_screen.dart';
 
 void main() {
   late Directory tempDir;
   late EntryRepository repo;
+  late PhotoRepository photoRepo;
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('entry_editor_test');
     Hive.init(tempDir.path);
     repo = await EntryRepository.open();
+    photoRepo = await PhotoRepository.open();
   });
 
   tearDown(() async {
@@ -25,7 +29,11 @@ void main() {
     JournalEntry? saved;
 
     await tester.pumpWidget(MaterialApp(
-      home: EntryEditorScreen(repository: repo, onSaved: (e) => saved = e),
+      home: EntryEditorScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        onSaved: (e) => saved = e,
+      ),
     ));
 
     await tester.enterText(find.byType(TextField).first, 'My first entry');
@@ -73,6 +81,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: EntryEditorScreen(
         repository: repo,
+        photoRepository: photoRepo,
         existingEntry: existing,
         onSaved: (e) => saved = e,
       ),
@@ -106,7 +115,11 @@ void main() {
     JournalEntry? saved;
 
     await tester.pumpWidget(MaterialApp(
-      home: EntryEditorScreen(repository: repo, onSaved: (e) => saved = e),
+      home: EntryEditorScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        onSaved: (e) => saved = e,
+      ),
     ));
 
     await tester.enterText(find.byType(TextField).first, 'Entry with a tag');
@@ -130,5 +143,70 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(saved!.tags, contains('gratitude'));
+  });
+
+  testWidgets('picking a photo attaches it to the saved entry', (tester) async {
+    // Real dart:io calls (Directory.createTemp, File.writeAsBytes) must run
+    // inside runAsync: testWidgets bodies execute in a FakeAsync zone by
+    // default, and real I/O there can hang indefinitely rather than just
+    // race, since nothing ever drives the fake clock forward for it.
+    late File tempImage;
+    await tester.runAsync(() async {
+      tempImage = File('${(await Directory.systemTemp.createTemp('photo_test')).path}/pic.jpg');
+      await tempImage.writeAsBytes([0, 1, 2, 3]);
+    });
+    JournalEntry? saved;
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryEditorScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        pickImage: () async => XFile(tempImage.path),
+        onSaved: (e) => saved = e,
+      ),
+    ));
+
+    await tester.enterText(find.byType(TextField).first, 'Entry with a photo');
+
+    // _addPhoto awaits real Hive I/O (photoRepository.save) before its
+    // setState adds the id to _photoIds, so the tap must stay inside
+    // runAsync (same reasoning as the check-button taps above). We poll on
+    // photoRepo state as the earliest possible signal that the write has
+    // landed, then do one extra delay+pump cycle as a buffer: Hive's
+    // Keystore can become visible slightly ahead of the awaited Future
+    // actually resolving, and it's the Future resolving that lets
+    // _addPhoto's setState run and update _photoIds.
+    await tester.runAsync(() async {
+      await tester.tap(find.byIcon(Icons.add_photo_alternate));
+      var attempts = 0;
+      while (photoRepo.getForEntry('').isEmpty && attempts < 100) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+        attempts++;
+      }
+      await Future.delayed(const Duration(milliseconds: 20));
+      await tester.pump();
+    });
+    await tester.pumpAndSettle();
+
+    // See the comment in the first test: tap must stay inside runAsync so
+    // the awaited save()'s continuation runs in the real zone, and we poll
+    // on `saved` rather than repo state since Hive updates its in-memory
+    // store synchronously ahead of the real disk write completing.
+    await tester.runAsync(() async {
+      await tester.tap(find.byIcon(Icons.check));
+      var attempts = 0;
+      while (saved == null && attempts < 100) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+        attempts++;
+      }
+    });
+    await tester.pumpAndSettle();
+
+    expect(saved!.photoIds, hasLength(1));
+    final asset = photoRepo.getById(saved!.photoIds.first);
+    expect(asset, isNotNull);
+    expect(asset!.localPath, tempImage.path);
   });
 }

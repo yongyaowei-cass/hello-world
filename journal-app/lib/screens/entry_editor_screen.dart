@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../data/entry_repository.dart';
+import '../data/photo_repository.dart';
 import '../models/journal_entry.dart';
+import '../models/photo_asset.dart';
 
 const _moodOptions = [
   (1, '😞'),
@@ -15,13 +18,17 @@ class EntryEditorScreen extends StatefulWidget {
   const EntryEditorScreen({
     super.key,
     required this.repository,
+    required this.photoRepository,
     required this.onSaved,
     this.existingEntry,
+    this.pickImage,
   });
 
   final EntryRepository repository;
+  final PhotoRepository photoRepository;
   final JournalEntry? existingEntry;
   final void Function(JournalEntry) onSaved;
+  final Future<XFile?> Function()? pickImage;
 
   @override
   State<EntryEditorScreen> createState() => _EntryEditorScreenState();
@@ -32,6 +39,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
   late final TextEditingController _tagController;
   int? _mood;
   late List<String> _tags;
+  late List<String> _photoIds;
 
   @override
   void initState() {
@@ -40,6 +48,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
     _tagController = TextEditingController();
     _mood = widget.existingEntry?.mood;
     _tags = List.of(widget.existingEntry?.tags ?? const []);
+    _photoIds = List.of(widget.existingEntry?.photoIds ?? const []);
   }
 
   @override
@@ -58,6 +67,20 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
     });
   }
 
+  Future<void> _addPhoto() async {
+    final pick = widget.pickImage ?? () => ImagePicker().pickImage(source: ImageSource.gallery);
+    final file = await pick();
+    if (file == null) return;
+    final asset = PhotoAsset(
+      id: const Uuid().v4(),
+      entryId: widget.existingEntry?.id ?? '',
+      createdAt: DateTime.now(),
+      localPath: file.path,
+    );
+    await widget.photoRepository.save(asset);
+    setState(() => _photoIds.add(asset.id));
+  }
+
   Future<void> _save() async {
     final now = DateTime.now();
     final existing = widget.existingEntry;
@@ -68,10 +91,18 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
       text: _textController.text,
       mood: _mood,
       tags: _tags,
-      photoIds: existing?.photoIds ?? const [],
+      photoIds: _photoIds,
       aiReflectionQuestion: existing?.aiReflectionQuestion,
     );
     await widget.repository.save(entry);
+    for (final id in _photoIds) {
+      final asset = widget.photoRepository.getById(id);
+      if (asset != null && asset.entryId != entry.id) {
+        await widget.photoRepository.save(
+          PhotoAsset(id: asset.id, entryId: entry.id, createdAt: asset.createdAt, localPath: asset.localPath, driveFileId: asset.driveFileId),
+        );
+      }
+    }
     widget.onSaved(entry);
   }
 
@@ -127,6 +158,10 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
                   ),
                 ),
               ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.add_photo_alternate),
+              onPressed: _addPhoto,
             ),
           ],
         ),

@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../ai/gemini_reflection_service.dart';
 import '../data/entry_repository.dart';
+import '../data/photo_repository.dart';
 import '../models/journal_entry.dart';
 
 const _moodEmoji = {1: '😞', 2: '😕', 3: '😐', 4: '🙂', 5: '😄'};
@@ -9,6 +11,7 @@ class EntryDetailScreen extends StatefulWidget {
   const EntryDetailScreen({
     super.key,
     required this.repository,
+    required this.photoRepository,
     required this.entry,
     required this.onEdit,
     required this.onDeleted,
@@ -16,6 +19,7 @@ class EntryDetailScreen extends StatefulWidget {
   });
 
   final EntryRepository repository;
+  final PhotoRepository photoRepository;
   final JournalEntry entry;
   final void Function(JournalEntry) onEdit;
   final VoidCallback onDeleted;
@@ -79,6 +83,24 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
             Wrap(
               spacing: 8,
               children: [for (final tag in _entry.tags) Chip(label: Text(tag))],
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final id in _entry.photoIds)
+                  if (widget.photoRepository.getById(id) != null)
+                    SizedBox(
+                      key: Key('photo-$id'),
+                      width: 64,
+                      height: 64,
+                      child: Image.file(
+                        File(widget.photoRepository.getById(id)!.localPath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const ColoredBox(color: Colors.black12),
+                      ),
+                    ),
+              ],
             ),
             const SizedBox(height: 16),
             if (widget.reflectionService != null && _entry.aiReflectionQuestion == null)
