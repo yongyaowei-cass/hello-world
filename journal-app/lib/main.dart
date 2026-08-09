@@ -69,13 +69,15 @@ class _JournalAppState extends State<JournalApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Journal',
-      home: SignInScreen(
-        onSignIn: () async {
-          await _authService.signIn();
-          await _trySync();
-          if (mounted) _openList(context);
-        },
-        onSkip: () => _openList(context),
+      home: Builder(
+        builder: (context) => SignInScreen(
+          onSignIn: () async {
+            await _authService.signIn();
+            await _trySync();
+            if (context.mounted) _openList(context);
+          },
+          onSkip: () => _openList(context),
+        ),
       ),
     );
   }
