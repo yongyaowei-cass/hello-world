@@ -22,19 +22,21 @@ void main() {
   });
 
   testWidgets('shows entry text snippet and hides deleted entries', (tester) async {
-    await repo.save(JournalEntry(
-      id: 'e1',
-      createdAt: DateTime.utc(2026, 8, 9),
-      updatedAt: DateTime.utc(2026, 8, 9),
-      text: 'Visible entry',
-    ));
-    await repo.save(JournalEntry(
-      id: 'e2',
-      createdAt: DateTime.utc(2026, 8, 8),
-      updatedAt: DateTime.utc(2026, 8, 8),
-      text: 'Hidden entry',
-      deleted: true,
-    ));
+    await tester.runAsync(() async {
+      await repo.save(JournalEntry(
+        id: 'e1',
+        createdAt: DateTime.utc(2026, 8, 9),
+        updatedAt: DateTime.utc(2026, 8, 9),
+        text: 'Visible entry',
+      ));
+      await repo.save(JournalEntry(
+        id: 'e2',
+        createdAt: DateTime.utc(2026, 8, 8),
+        updatedAt: DateTime.utc(2026, 8, 8),
+        text: 'Hidden entry',
+        deleted: true,
+      ));
+    });
 
     await tester.pumpWidget(MaterialApp(
       home: EntryListScreen(repository: repo, onCreateEntry: () {}, onOpenEntry: (_) {}),
@@ -60,12 +62,14 @@ void main() {
   });
 
   testWidgets('tapping an entry row calls onOpenEntry with that entry', (tester) async {
-    await repo.save(JournalEntry(
-      id: 'e1',
-      createdAt: DateTime.utc(2026, 8, 9),
-      updatedAt: DateTime.utc(2026, 8, 9),
-      text: 'Tap me',
-    ));
+    await tester.runAsync(() async {
+      await repo.save(JournalEntry(
+        id: 'e1',
+        createdAt: DateTime.utc(2026, 8, 9),
+        updatedAt: DateTime.utc(2026, 8, 9),
+        text: 'Tap me',
+      ));
+    });
     JournalEntry? opened;
 
     await tester.pumpWidget(MaterialApp(
