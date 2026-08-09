@@ -104,4 +104,16 @@ void main() {
     expect(remote.remote.containsKey('local-only'), isTrue);
     expect(remote.remote.containsKey('remote-only'), isTrue);
   });
+
+  test('soft-deleted entry propagates to remote with deleted flag', () async {
+    final entry = make('e1', updatedAt: DateTime.utc(2026, 8, 1));
+    await local.save(entry);
+    await remote.upload(entry);
+
+    await local.softDelete('e1');
+
+    await sync.sync(local, remote);
+
+    expect(remote.remote['e1']!.deleted, isTrue);
+  });
 }
