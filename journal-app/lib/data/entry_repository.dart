@@ -5,17 +5,15 @@ import '../models/journal_entry.dart';
 class EntryRepository {
   EntryRepository(this._box);
 
-  final Box<dynamic> _box;
+  final Box<Map> _box;
 
   static Future<EntryRepository> open() async {
-    final box = await Hive.openBox<dynamic>('entries');
+    final box = await Hive.openBox<Map>('entries');
     return EntryRepository(box);
   }
 
   List<JournalEntry> getAllIncludingDeleted() {
-    return _box.values
-        .map((v) => JournalEntry.fromJson(v as Map<dynamic, dynamic>))
-        .toList()
+    return _box.values.map(JournalEntry.fromJson).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
@@ -36,5 +34,5 @@ class EntryRepository {
     await save(existing.copyWith(deleted: true, updatedAt: DateTime.now()));
   }
 
-  ValueListenable<Box> listenable() => _box as ValueListenable<Box>;
+  ValueListenable<Box<Map>> listenable() => _box as ValueListenable<Box<Map>>;
 }
