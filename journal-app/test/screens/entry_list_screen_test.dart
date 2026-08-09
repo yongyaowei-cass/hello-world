@@ -41,6 +41,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: EntryListScreen(repository: repo, onCreateEntry: () {}, onOpenEntry: (_) {}),
     ));
+    await tester.pumpAndSettle();
 
     expect(find.text('Visible entry'), findsOneWidget);
     expect(find.text('Hidden entry'), findsNothing);
@@ -79,6 +80,7 @@ void main() {
         onOpenEntry: (e) => opened = e,
       ),
     ));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tap me'));
 
     expect(opened?.id, 'e1');
