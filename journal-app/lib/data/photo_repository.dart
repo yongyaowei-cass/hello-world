@@ -26,4 +26,6 @@ class PhotoRepository {
   Future<void> save(PhotoAsset asset) => _box.put(asset.id, asset.toJson());
 
   Future<void> delete(String id) => _box.delete(id);
+
+  List<PhotoAsset> getAll() => _box.values.map(PhotoAsset.fromJson).toList();
 }

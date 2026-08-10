@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'ai/gemini_reflection_service.dart';
 import 'data/entry_repository.dart';
@@ -13,6 +16,8 @@ import 'screens/entry_list_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'sync/auth_service.dart';
 import 'sync/google_drive_entry_store.dart';
+import 'sync/google_drive_photo_store.dart';
+import 'sync/photo_sync_service.dart';
 import 'sync/sync_service.dart';
 
 // Replace with a real key restricted in Google Cloud Console (see spec: Architecture).
@@ -39,6 +44,14 @@ class JournalApp extends StatefulWidget {
 class _JournalAppState extends State<JournalApp> {
   final _authService = AuthService();
   final _syncService = SyncService();
+  final _photoSyncService = PhotoSyncService(
+    saveLocalBytes: (photoId, bytes) async {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$photoId.jpg');
+      await file.writeAsBytes(bytes);
+      return file.path;
+    },
+  );
   final _syncStatus = ValueNotifier(SyncStatus.offline);
   GeminiReflectionService? _reflectionService;
 
@@ -63,6 +76,7 @@ class _JournalAppState extends State<JournalApp> {
     _syncStatus.value = SyncStatus.syncing;
     final store = GoogleDriveEntryStore(drive.DriveApi(authClient));
     await _syncService.sync(widget.entryRepository, store);
+    await _photoSyncService.sync(widget.photoRepository, GoogleDrivePhotoStore(drive.DriveApi(authClient)));
     _syncStatus.value = SyncStatus.synced;
   }
 

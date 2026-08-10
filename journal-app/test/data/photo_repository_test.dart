@@ -42,4 +42,11 @@ void main() {
 
     expect(repo.getById('p1'), isNull);
   });
+
+  test('getAll returns every stored photo asset', () async {
+    await repo.save(PhotoAsset(id: 'p1', entryId: 'e1', createdAt: DateTime.utc(2026, 8, 9)));
+    await repo.save(PhotoAsset(id: 'p2', entryId: 'e2', createdAt: DateTime.utc(2026, 8, 9)));
+
+    expect(repo.getAll().map((p) => p.id), containsAll(['p1', 'p2']));
+  });
 }
