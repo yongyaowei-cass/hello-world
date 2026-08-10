@@ -236,4 +236,70 @@ void main() {
     expect(asset!.localPath, tempImage.path);
     expect(photoRepo.getById(saved!.photoIds.first)!.entryId, saved!.id);
   });
+
+  testWidgets('picked photo renders a thumbnail, and removing it excludes it from the saved entry', (tester) async {
+    late File tempImage;
+    await tester.runAsync(() async {
+      tempImage = File('${(await Directory.systemTemp.createTemp('photo_test')).path}/pic.jpg');
+      await tempImage.writeAsBytes([0, 1, 2, 3]);
+    });
+    JournalEntry? saved;
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryEditorScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        pickImage: () async => XFile(tempImage.path),
+        onSaved: (e) => saved = e,
+      ),
+    ));
+
+    // Same reasoning as "picking a photo attaches it to the saved entry":
+    // _addPhoto awaits real Hive I/O before its setState, so the tap must
+    // stay inside runAsync, and we poll the count-keyed widget (still
+    // rendered, see entry_editor_screen.dart) as our completion signal
+    // rather than repo state.
+    await tester.runAsync(() async {
+      await tester.tap(find.byIcon(Icons.add_photo_alternate));
+      var attempts = 0;
+      while (find.byKey(const Key('photoCount-1')).evaluate().isEmpty && attempts < 100) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+        attempts++;
+      }
+    });
+    await tester.pumpAndSettle();
+
+    // Exactly one PhotoAsset was saved by _addPhoto; look up its real id
+    // (a fresh uuid we can't predict ahead of time) to find the thumbnail
+    // and remove-button keys, which follow the entry_detail_screen.dart
+    // convention of Key('photo-$id').
+    final photoId = photoRepo.getAll().single.id;
+    expect(find.byKey(Key('photo-$photoId')), findsOneWidget);
+
+    await tester.tap(find.byKey(Key('removePhoto-$photoId')));
+    await tester.pump();
+
+    expect(find.byKey(Key('photo-$photoId')), findsNothing);
+
+    // See the comment in the first test: tap must stay inside runAsync so
+    // the awaited save()'s continuation runs in the real zone, and we poll
+    // on `saved` rather than repo state since Hive updates its in-memory
+    // store synchronously ahead of the real disk write completing.
+    await tester.runAsync(() async {
+      await tester.tap(find.byIcon(Icons.check));
+      var attempts = 0;
+      while (saved == null && attempts < 100) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+        attempts++;
+      }
+    });
+    await tester.pumpAndSettle();
+
+    expect(saved!.photoIds, isEmpty);
+    // Removing a photo from the entry doesn't need to delete the underlying
+    // PhotoAsset/Hive record -- it just shouldn't be attached anymore.
+    expect(photoRepo.getById(photoId), isNotNull);
+  });
 }

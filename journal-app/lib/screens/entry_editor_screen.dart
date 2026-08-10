@@ -5,6 +5,7 @@ import '../data/entry_repository.dart';
 import '../data/photo_repository.dart';
 import '../models/journal_entry.dart';
 import '../models/photo_asset.dart';
+import '../photos/photo_bytes_store.dart';
 
 const _moodOptions = [
   (1, '😞'),
@@ -80,6 +81,14 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
     await widget.photoRepository.save(asset);
     if (!mounted) return;
     setState(() => _photoIds.add(asset.id));
+  }
+
+  // Detaches a photo from this entry. This intentionally leaves the
+  // PhotoAsset/Hive record (and any already-uploaded Drive data) alone --
+  // it just stops the id from being included in _photoIds, so it won't be
+  // written to entry.photoIds on save.
+  void _removePhoto(String id) {
+    setState(() => _photoIds.remove(id));
   }
 
   Future<void> _save() async {
@@ -164,6 +173,54 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
               icon: const Icon(Icons.add_photo_alternate),
               onPressed: _addPhoto,
             ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final id in _photoIds)
+                  if (widget.photoRepository.getById(id)?.localPath != null)
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        SizedBox(
+                          key: Key('photo-$id'),
+                          width: 64,
+                          height: 64,
+                          child: buildLocalPhotoThumbnail(
+                            widget.photoRepository.getById(id)!.localPath!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const ColoredBox(color: Colors.black12),
+                          ),
+                        ),
+                        Positioned(
+                          top: -8,
+                          right: -8,
+                          child: GestureDetector(
+                            key: Key('removePhoto-$id'),
+                            onTap: () => _removePhoto(id),
+                            child: Container(
+                              width: 20,
+                              height: 20,
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.close, size: 14, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+              ],
+            ),
+            // Zero-size marker kept purely so widget tests can poll for the
+            // moment _addPhoto's setState has actually landed (see
+            // test/screens/entry_editor_screen_test.dart) -- Hive's Keystore
+            // can reflect the underlying save before this widget's own
+            // await/setState resumes, so polling repo state directly is
+            // unreliable, and the real thumbnail above is keyed by a photo
+            // id the test can't predict ahead of the pick completing.
             SizedBox.shrink(key: Key('photoCount-${_photoIds.length}')),
           ],
         ),
