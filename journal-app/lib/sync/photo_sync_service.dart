@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'dart:typed_data';
 import '../data/photo_repository.dart';
+import '../photos/photo_bytes_store.dart';
 import 'drive_photo_store.dart';
 
 class PhotoSyncService {
@@ -11,7 +11,7 @@ class PhotoSyncService {
   Future<void> sync(PhotoRepository local, DrivePhotoStore remote) async {
     for (final asset in local.getAll()) {
       if (asset.driveFileId == null && asset.localPath != null) {
-        final bytes = await File(asset.localPath!).readAsBytes();
+        final bytes = await readLocalPhotoBytes(asset.localPath!);
         final fileId = await remote.upload(asset.id, bytes);
         await local.save(asset.copyWith(driveFileId: fileId));
       } else if (asset.localPath == null && asset.driveFileId != null) {

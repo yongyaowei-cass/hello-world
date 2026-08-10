@@ -1,9 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import '../ai/gemini_reflection_service.dart';
 import '../data/entry_repository.dart';
 import '../data/photo_repository.dart';
 import '../models/journal_entry.dart';
+import '../photos/photo_bytes_store.dart';
 
 const _moodEmoji = {1: '😞', 2: '😕', 3: '😐', 4: '🙂', 5: '😄'};
 
@@ -93,8 +93,8 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
                       key: Key('photo-$id'),
                       width: 64,
                       height: 64,
-                      child: Image.file(
-                        File(widget.photoRepository.getById(id)!.localPath!),
+                      child: buildLocalPhotoThumbnail(
+                        widget.photoRepository.getById(id)!.localPath!,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) =>
                             const ColoredBox(color: Colors.black12),

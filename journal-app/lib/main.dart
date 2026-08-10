@@ -1,15 +1,13 @@
-import 'dart:io';
-
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'ai/gemini_reflection_service.dart';
 import 'data/entry_repository.dart';
 import 'data/photo_repository.dart';
 import 'models/journal_entry.dart';
+import 'photos/photo_bytes_store.dart';
 import 'screens/entry_detail_screen.dart';
 import 'screens/entry_editor_screen.dart';
 import 'screens/entry_list_screen.dart';
@@ -44,14 +42,7 @@ class JournalApp extends StatefulWidget {
 class _JournalAppState extends State<JournalApp> {
   final _authService = AuthService();
   final _syncService = SyncService();
-  final _photoSyncService = PhotoSyncService(
-    saveLocalBytes: (photoId, bytes) async {
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/$photoId.jpg');
-      await file.writeAsBytes(bytes);
-      return file.path;
-    },
-  );
+  final _photoSyncService = PhotoSyncService(saveLocalBytes: saveLocalPhotoBytes);
   final _syncStatus = ValueNotifier(SyncStatus.offline);
   GeminiReflectionService? _reflectionService;
 
