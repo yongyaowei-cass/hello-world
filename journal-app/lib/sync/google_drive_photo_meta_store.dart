@@ -29,7 +29,7 @@ RemotePhotoMeta parsePhotoMeta(Map json) {
 Map<String, dynamic> _toJson(RemotePhotoMeta meta) => {
       'id': meta.id,
       'entryId': meta.entryId,
-      'createdAt': meta.createdAt.toIso8601String(),
+      'createdAt': meta.createdAt.toUtc().toIso8601String(),
       'driveFileId': meta.driveFileId,
     };
 

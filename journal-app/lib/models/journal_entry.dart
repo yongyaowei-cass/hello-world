@@ -45,8 +45,8 @@ class JournalEntry {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
+        'createdAt': createdAt.toUtc().toIso8601String(),
+        'updatedAt': updatedAt.toUtc().toIso8601String(),
         'text': text,
         'mood': mood,
         'tags': tags,

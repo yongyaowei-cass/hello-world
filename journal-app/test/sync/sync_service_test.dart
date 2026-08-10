@@ -105,6 +105,39 @@ void main() {
     expect(remote.remote.containsKey('remote-only'), isTrue);
   });
 
+  // Regression coverage for the "Drive's modifiedTime used as updatedAt"
+  // bug: a fully-synced, unchanged entry must never be re-downloaded, no
+  // matter how many sync passes run.
+  //
+  // Note this test cannot, by itself, catch a regression of that specific
+  // bug: it lived entirely in GoogleDriveEntryStore's Drive-file parsing
+  // (see google_drive_entry_store_test.dart), not in SyncService's
+  // comparison logic exercised here. FakeDriveEntryStore.listEntryMetas()
+  // already returns the entry's own `updatedAt` (`RemoteEntryMeta(id: e.id,
+  // updatedAt: e.updatedAt)`) with no Drive-specific timestamp anywhere
+  // near it, so a fake built against the DriveEntryStore *contract* is
+  // correct by construction and cannot reproduce a bug that only existed in
+  // one concrete implementation's adapter code translating Drive's
+  // `modifiedTime` into that contract. This test instead documents and
+  // guards the behavioural contract itself -- useful if a future change to
+  // SyncService's comparison logic (not just the Drive adapter) ever
+  // reintroduces spurious re-syncing.
+  test('an unchanged entry is never re-downloaded across repeated sync passes', () async {
+    final ts = DateTime.utc(2026, 8, 9, 9, 41);
+    await local.save(make('e1', updatedAt: ts, text: 'stable'));
+
+    await sync.sync(local, remote); // first pass: pushes local -> remote
+
+    for (var i = 0; i < 3; i++) {
+      await sync.sync(local, remote);
+    }
+
+    expect(local.getById('e1')!.updatedAt, ts);
+    expect(local.getById('e1')!.text, 'stable');
+    expect(remote.remote['e1']!.updatedAt, ts);
+    expect(remote.remote['e1']!.text, 'stable');
+  });
+
   test('soft-deleted entry propagates to remote with deleted flag', () async {
     final entry = make('e1', updatedAt: DateTime.utc(2026, 8, 1));
     await local.save(entry);

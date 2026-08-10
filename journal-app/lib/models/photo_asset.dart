@@ -26,7 +26,7 @@ class PhotoAsset {
   Map<String, dynamic> toJson() => {
         'id': id,
         'entryId': entryId,
-        'createdAt': createdAt.toIso8601String(),
+        'createdAt': createdAt.toUtc().toIso8601String(),
         'localPath': localPath,
         'driveFileId': driveFileId,
       };

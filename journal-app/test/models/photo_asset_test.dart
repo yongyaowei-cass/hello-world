@@ -20,6 +20,18 @@ void main() {
     expect(restored.createdAt, asset.createdAt);
   });
 
+  test('PhotoAsset toJson serializes createdAt as UTC even when constructed from local time', () {
+    final localCreatedAt = DateTime(2026, 8, 9, 9, 40);
+    final asset = PhotoAsset(id: 'p1', entryId: 'e1', createdAt: localCreatedAt);
+
+    final json = asset.toJson();
+    final createdAtStr = json['createdAt'] as String;
+
+    expect(createdAtStr.endsWith('Z') || createdAtStr.contains('+00:00'), isTrue,
+        reason: 'createdAt "$createdAtStr" is missing a UTC indicator');
+    expect(PhotoAsset.fromJson(json).createdAt.toUtc(), localCreatedAt.toUtc());
+  });
+
   test('PhotoAsset fromJson allows null localPath and driveFileId', () {
     final restored = PhotoAsset.fromJson({
       'id': 'p2',
