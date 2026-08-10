@@ -8,6 +8,7 @@ import 'package:journal_app/sync/sync_service.dart';
 
 class FakeDriveEntryStore implements DriveEntryStore {
   final Map<String, JournalEntry> remote = {};
+  int downloadCount = 0;
 
   @override
   Future<List<RemoteEntryMeta>> listEntryMetas() async {
@@ -17,7 +18,10 @@ class FakeDriveEntryStore implements DriveEntryStore {
   }
 
   @override
-  Future<JournalEntry> download(String id) async => remote[id]!;
+  Future<JournalEntry> download(String id) async {
+    downloadCount++;
+    return remote[id]!;
+  }
 
   @override
   Future<void> upload(JournalEntry entry) async {
@@ -136,6 +140,7 @@ void main() {
     expect(local.getById('e1')!.text, 'stable');
     expect(remote.remote['e1']!.updatedAt, ts);
     expect(remote.remote['e1']!.text, 'stable');
+    expect(remote.downloadCount, 0);
   });
 
   test('soft-deleted entry propagates to remote with deleted flag', () async {
