@@ -176,4 +176,71 @@ void main() {
 
     await Hive.deleteFromDisk();
   });
+
+  test('an entryId correction made after an early sync still reaches device B', () async {
+    // Reproduces the entry_editor_screen.dart race that motivated Fix 1 in
+    // PhotoMetaSyncService: _addPhoto() saves a brand-new PhotoAsset with
+    // entryId: '' immediately (the real entry id isn't known until _save()
+    // runs). If a sync fires in that window -- and the binary upload
+    // happens to complete during it too -- driveFileId ends up settled
+    // (non-null on both sides) while entryId is still stale on Drive.
+    Hive.init(tempDirA.path);
+    entryRepoA = await EntryRepository.open();
+    photoRepoA = await PhotoRepository.open();
+
+    final srcFile = File('${tempDirA.path}/pic.jpg');
+    await srcFile.writeAsBytes([1, 2, 3, 4]);
+
+    // _addPhoto(): entryId is '' because the entry doesn't exist yet.
+    await photoRepoA.save(PhotoAsset(
+      id: 'p1',
+      entryId: '',
+      createdAt: DateTime.utc(2026, 8, 9),
+      localPath: srcFile.path,
+    ));
+
+    // A connectivity-triggered sync fires before the user hits save. No
+    // entry exists yet, so only the photo (with its stale entryId) syncs;
+    // the binary sync in the same pass also completes, so driveFileId ends
+    // up settled on both sides with entryId still ''.
+    await fullSync(entryRepoA, photoRepoA, filesDirA);
+    expect(drivePhotoMetas.remote['p1']!.entryId, '');
+    expect(drivePhotoMetas.remote['p1']!.driveFileId, isNotNull);
+
+    // _save(): the entry now exists, so entryId gets corrected locally.
+    await entryRepoA.save(JournalEntry(
+      id: 'e1',
+      createdAt: DateTime.utc(2026, 8, 9),
+      updatedAt: DateTime.utc(2026, 8, 9),
+      text: 'Entry with a photo',
+      photoIds: const ['p1'],
+    ));
+    final corrected = photoRepoA.getById('p1')!;
+    await photoRepoA.save(PhotoAsset(
+      id: corrected.id,
+      entryId: 'e1',
+      createdAt: corrected.createdAt,
+      localPath: corrected.localPath,
+      driveFileId: corrected.driveFileId,
+    ));
+
+    // A later sync should propagate the correction to Drive even though
+    // driveFileId already agrees on both sides.
+    await fullSync(entryRepoA, photoRepoA, filesDirA);
+    expect(drivePhotoMetas.remote['p1']!.entryId, 'e1');
+    await Hive.deleteFromDisk();
+
+    // Device B, syncing fresh, must see the corrected entryId -- not the
+    // stale '' that was published before _save() ran.
+    Hive.init(tempDirB.path);
+    entryRepoB = await EntryRepository.open();
+    photoRepoB = await PhotoRepository.open();
+    await fullSync(entryRepoB, photoRepoB, filesDirB);
+
+    final pulledPhoto = photoRepoB.getById('p1');
+    expect(pulledPhoto, isNotNull);
+    expect(pulledPhoto!.entryId, 'e1');
+
+    await Hive.deleteFromDisk();
+  });
 }

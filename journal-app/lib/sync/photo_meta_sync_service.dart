@@ -45,20 +45,28 @@ class PhotoMetaSyncService {
         // finishes uploading.
         await remote.upload(_toRemoteMeta(localAsset));
       } else if (localAsset != null && remoteMeta != null) {
-        if (localAsset.driveFileId != null && remoteMeta.driveFileId == null) {
-          // Local learned a driveFileId (its binary just got uploaded) that
-          // remote doesn't know about yet -- push the update.
-          await remote.upload(_toRemoteMeta(localAsset));
-        } else if (localAsset.driveFileId == null && remoteMeta.driveFileId != null) {
+        final localMeta = _toRemoteMeta(localAsset);
+        if (localAsset.driveFileId == null && remoteMeta.driveFileId != null) {
           // Remote already knows the driveFileId (another device uploaded
           // it) but this local record doesn't yet -- pull it in, without
           // touching localPath, so the binary sync's download branch picks
           // it up.
           await local.save(localAsset.copyWith(driveFileId: remoteMeta.driveFileId));
+        } else if (!_metaEquals(localMeta, remoteMeta)) {
+          // Local and remote disagree on some field other than the
+          // null/non-null driveFileId case handled above -- most notably
+          // entryId, which entry_editor_screen.dart's _addPhoto() initially
+          // saves as '' for a brand-new entry and only corrects once _save()
+          // runs. If a sync fires in between (and the binary upload also
+          // completes in that window), driveFileId can end up settled
+          // (non-null on both sides) while entryId is still stale on
+          // remote. There's no updatedAt/version field on PhotoAsset to do
+          // real last-write-wins, so treat local as authoritative and push
+          // it: the creating device is the only one that ever changes these
+          // fields post-creation, and only during this brief window.
+          await remote.upload(localMeta);
         }
-        // Both sides already agree (or both non-null and differ, which
-        // shouldn't happen since a given photo's binary is only ever
-        // uploaded once, from a single device) -- nothing to do.
+        // Otherwise both sides already fully agree -- nothing to do.
       }
     }
   }
@@ -69,4 +77,10 @@ class PhotoMetaSyncService {
         createdAt: asset.createdAt,
         driveFileId: asset.driveFileId,
       );
+
+  bool _metaEquals(RemotePhotoMeta a, RemotePhotoMeta b) =>
+      a.id == b.id &&
+      a.entryId == b.entryId &&
+      a.createdAt == b.createdAt &&
+      a.driveFileId == b.driveFileId;
 }

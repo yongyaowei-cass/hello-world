@@ -122,6 +122,34 @@ void main() {
     expect(local.getById('p1')!.driveFileId, 'drive-file-p1');
   });
 
+  test('local entryId correction propagates to remote even when driveFileId already agrees on both sides', () async {
+    // Reproduces the entry_editor_screen.dart race: _addPhoto() saves a new
+    // PhotoAsset with entryId: '' immediately (the real entry id isn't known
+    // yet for a brand-new entry). If a sync fires before _save() rewrites it
+    // to the real entry id, and the binary upload also happens to complete
+    // in that window, both sides end up agreeing on a non-null driveFileId
+    // while remote is still stuck with the stale entryId. Once driveFileId
+    // is non-null on both sides, the old logic considered the id "settled"
+    // and never looked at entryId again.
+    await local.save(PhotoAsset(
+      id: 'p1',
+      entryId: 'e1', // corrected locally by _save() after the entry was created
+      createdAt: DateTime.utc(2026, 8, 9),
+      localPath: '/device/a/p1.jpg',
+      driveFileId: 'drive-file-p1',
+    ));
+    remote.remote['p1'] = RemotePhotoMeta(
+      id: 'p1',
+      entryId: '', // stale value published before _save() ran
+      createdAt: DateTime.utc(2026, 8, 9),
+      driveFileId: 'drive-file-p1',
+    );
+
+    await sync.sync(local, remote);
+
+    expect(remote.remote['p1']!.entryId, 'e1');
+  });
+
   test('photo metadata already in sync on both sides is left unchanged', () async {
     await local.save(PhotoAsset(
       id: 'p1',
