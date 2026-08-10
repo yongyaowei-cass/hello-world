@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:googleapis_auth/googleapis_auth.dart' as gapis;
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'ai/gemini_reflection_service.dart';
@@ -102,13 +103,12 @@ void handleAppLifecycleStateForSync(AppLifecycleState state, VoidCallback trySyn
 }
 
 /// Runs [work] unless a previous call through this same guard is still
-/// running, in which case this call is a no-op. [isInFlight]/[setInFlight]
-/// track that state for the caller (typically backed by a single instance
-/// field) so the guard rule itself has no dependency on any particular
-/// state container and is directly unit-testable (see
-/// test/main_sync_guard_test.dart). The flag is always reset via `finally`,
-/// even when [work] throws, so a single failure can't permanently wedge
-/// every later call into a silent no-op.
+/// running. [isInFlight]/[setInFlight] track that state for the caller
+/// (typically backed by a single instance field) so the guard rule itself
+/// has no dependency on any particular state container and is directly
+/// unit-testable (see test/main_sync_guard_test.dart). The in-flight flag
+/// is always reset via `finally`, even when [work] throws, so a single
+/// failure can't permanently wedge every later call into a no-op.
 ///
 /// Addresses the fact that [AppLifecycleState.resumed] fires whenever any
 /// external activity is dismissed — not just when the user genuinely
@@ -118,19 +118,77 @@ void handleAppLifecycleStateForSync(AppLifecycleState state, VoidCallback trySyn
 /// while another one (from `onSignIn`, `onSaved`, or the startup silent
 /// sign-in check) is still in flight, interleaving writes to `SyncStatus`
 /// and the sync services over the same repositories.
+///
+/// A call that arrives while another is in flight is NOT simply dropped: it
+/// would otherwise silently discard a legitimate trigger. Concretely,
+/// `onSaved`/`onDeleted` call `_trySync()` because new local state needs
+/// pushing; if that call landed while a lifecycle-triggered sync (e.g. the
+/// photo picker closing) was already in flight and got dropped, the
+/// in-flight sync — which read the repository BEFORE the save/delete —
+/// would still finish and set status to `synced`, even though the new
+/// entry was never pushed. Instead, [isPending]/[setPending] record that a
+/// re-run is needed, and once the in-flight [work] finishes, this runs
+/// [work] exactly once more, reflecting state at (or after) the skip. Any
+/// number of calls skipped while one run is in flight collapse into a
+/// single trailing re-run, not one re-run per skipped call.
 @visibleForTesting
 Future<void> runGuardedSync(
   bool Function() isInFlight,
   void Function(bool) setInFlight,
+  bool Function() isPending,
+  void Function(bool) setPending,
   Future<void> Function() work,
 ) async {
-  if (isInFlight()) return;
+  if (isInFlight()) {
+    setPending(true);
+    return;
+  }
   setInFlight(true);
   try {
     await work();
   } finally {
     setInFlight(false);
   }
+  if (isPending()) {
+    setPending(false);
+    await runGuardedSync(isInFlight, setInFlight, isPending, setPending, work);
+  }
+}
+
+/// Runs the actual sync work behind `_trySync()`: checks for a signed-in
+/// account, obtains a Drive-authenticated client, and delegates to
+/// [runSyncWithStatus] for the syncing/synced/offline status transitions.
+///
+/// [currentUser] is checked BEFORE calling [runSyncWithStatus] at all: "not
+/// signed in" is a normal no-op, not a sync failure, so it must not touch
+/// [status]. [authenticatedClient] is deliberately called INSIDE
+/// [runSyncWithStatus]'s guarded closure (not before it, as this used to be
+/// structured) so that a throw from it — e.g. offline, an expired or
+/// revoked token — is caught by the same try/catch and correctly flips
+/// [status] to `SyncStatus.offline`. Previously `authenticatedClient()` sat
+/// outside that guard, so a throw there propagated straight out of
+/// `_trySync()` — an unhandled Future rejection at the
+/// `didChangeAppLifecycleState` call site, which invokes `_trySync` as a
+/// bare `VoidCallback` — and left [status] at whatever it was before: wrong
+/// after a prior successful sync, where the UI would keep showing "synced"
+/// even though the latest attempt failed.
+///
+/// Extracted as a top-level function, parameterized over plain fakes, for
+/// the same testability reasons as [runSyncWithStatus] and
+/// [attemptSilentSignIn] (see test/main_try_sync_test.dart).
+@visibleForTesting
+Future<void> performSync(
+  Object? currentUser,
+  ValueNotifier<SyncStatus> status,
+  Future<Object?> Function() authenticatedClient,
+  Future<void> Function(Object authClient) doSync,
+) async {
+  if (currentUser == null) return;
+  await runSyncWithStatus(status, () async {
+    final authClient = await authenticatedClient();
+    if (authClient == null) return;
+    await doSync(authClient);
+  });
 }
 
 Future<void> main() async {
@@ -170,6 +228,11 @@ class _JournalAppState extends State<JournalApp> with WidgetsBindingObserver {
   // runGuardedSync's docstring for why AppLifecycleState.resumed alone makes
   // this reachable). Always reset in runGuardedSync's `finally`.
   bool _syncInFlight = false;
+
+  // Set when a _trySync() call arrives while _syncInFlight is already true,
+  // so that call's work runs once more (a single trailing re-run) instead
+  // of being silently dropped — see runGuardedSync's docstring.
+  bool _syncPending = false;
 
   @override
   void initState() {
@@ -214,15 +277,17 @@ class _JournalAppState extends State<JournalApp> with WidgetsBindingObserver {
     return runGuardedSync(
       () => _syncInFlight,
       (value) => _syncInFlight = value,
-      () async {
-        final account = _authService.currentUser;
-        if (account == null) return;
-        final authClient = await _authService.authenticatedClient();
-        if (authClient == null) return;
-        await runSyncWithStatus(_syncStatus, () async {
-          final store = GoogleDriveEntryStore(drive.DriveApi(authClient));
-          final photoMetaStore = GoogleDrivePhotoMetaStore(drive.DriveApi(authClient));
-          final photoStore = GoogleDrivePhotoStore(drive.DriveApi(authClient));
+      () => _syncPending,
+      (value) => _syncPending = value,
+      () => performSync(
+        _authService.currentUser,
+        _syncStatus,
+        _authService.authenticatedClient,
+        (authClient) async {
+          final client = authClient as gapis.AuthClient;
+          final store = GoogleDriveEntryStore(drive.DriveApi(client));
+          final photoMetaStore = GoogleDrivePhotoMetaStore(drive.DriveApi(client));
+          final photoStore = GoogleDrivePhotoStore(drive.DriveApi(client));
           await _syncService.sync(widget.entryRepository, store);
           // Pull metadata for photos this device doesn't know about yet (so
           // the binary sync below has something to download) and push
@@ -233,8 +298,8 @@ class _JournalAppState extends State<JournalApp> with WidgetsBindingObserver {
           // discovered (on upload) gets published to Drive for other
           // devices.
           await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
-        });
-      },
+        },
+      ),
     );
   }
 

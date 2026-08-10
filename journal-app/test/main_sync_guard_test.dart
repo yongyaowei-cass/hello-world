@@ -19,41 +19,163 @@ import 'package:journal_app/main.dart';
 // rule itself is directly unit-testable without a real AuthService/Drive
 // client — same rationale as runSyncWithStatus and attemptSilentSignIn in
 // this file's sibling test files.
+//
+// A skipped call must not be a silent drop: onSaved/onDeleted calling
+// _trySync() while a lifecycle-triggered sync (e.g. from the photo picker
+// closing) is already in flight represents genuine new local state that
+// needs pushing. runGuardedSync now marks that a re-run is needed
+// (isPending/setPending) and, once the in-flight work() finishes, runs it
+// exactly once more — collapsing any number of skipped calls into a single
+// trailing run instead of dropping them.
 void main() {
-  test('runGuardedSync skips a concurrent call while one is already running', () async {
-    var inFlight = false;
-    var runCount = 0;
-    final blocker = Completer<void>();
+  test(
+    'runGuardedSync skips a concurrent call while one is already running, but marks it pending',
+    () async {
+      var inFlight = false;
+      var pending = false;
+      var runCount = 0;
+      final blocker = Completer<void>();
 
-    Future<void> work() async {
-      runCount++;
-      await blocker.future;
-    }
+      Future<void> work() async {
+        runCount++;
+        await blocker.future;
+      }
 
-    final first = runGuardedSync(() => inFlight, (v) => inFlight = v, work);
-    // Let the first call's synchronous prelude (setting inFlight = true)
-    // run before the second call checks the flag.
-    await Future<void>.delayed(Duration.zero);
-    expect(inFlight, isTrue);
+      final first = runGuardedSync(
+        () => inFlight,
+        (v) => inFlight = v,
+        () => pending,
+        (v) => pending = v,
+        work,
+      );
+      // Let the first call's synchronous prelude (setting inFlight = true)
+      // run before the second call checks the flag.
+      await Future<void>.delayed(Duration.zero);
+      expect(inFlight, isTrue);
 
-    final second = runGuardedSync(() => inFlight, (v) => inFlight = v, work);
+      final second = runGuardedSync(
+        () => inFlight,
+        (v) => inFlight = v,
+        () => pending,
+        (v) => pending = v,
+        work,
+      );
+      await second;
 
-    blocker.complete();
-    await Future.wait([first, second]);
+      // The second call was skipped (work not re-entered concurrently)...
+      expect(runCount, 1);
+      // ...but recorded as pending so it isn't silently dropped.
+      expect(pending, isTrue);
 
-    expect(runCount, 1);
-  });
+      blocker.complete();
+      await first;
+
+      // The pending flag queued a trailing re-run, so work ran again once
+      // the first call finished (see the next test for the dedicated
+      // trailing-re-run assertion).
+      expect(runCount, 2);
+      expect(pending, isFalse);
+    },
+  );
+
+  test(
+    'runGuardedSync runs work a second time (a trailing re-run) after a call was '
+    'skipped while the first was in flight',
+    () async {
+      var inFlight = false;
+      var pending = false;
+      var runCount = 0;
+      final firstBlocker = Completer<void>();
+
+      Future<void> work() async {
+        runCount++;
+        if (runCount == 1) {
+          await firstBlocker.future;
+        }
+      }
+
+      final first = runGuardedSync(
+        () => inFlight,
+        (v) => inFlight = v,
+        () => pending,
+        (v) => pending = v,
+        work,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(inFlight, isTrue);
+
+      // Arrives while the first call is still running: skipped, but queues
+      // a trailing re-run instead of being dropped.
+      final second = runGuardedSync(
+        () => inFlight,
+        (v) => inFlight = v,
+        () => pending,
+        (v) => pending = v,
+        work,
+      );
+      await second;
+      expect(runCount, 1);
+
+      firstBlocker.complete();
+      await first;
+
+      // The trailing re-run happened: work was called a second time, not
+      // just the first (in-flight) call completing.
+      expect(runCount, 2);
+      expect(pending, isFalse);
+      expect(inFlight, isFalse);
+    },
+  );
+
+  test(
+    'runGuardedSync collapses multiple skipped calls into exactly one trailing re-run',
+    () async {
+      var inFlight = false;
+      var pending = false;
+      var runCount = 0;
+      final firstBlocker = Completer<void>();
+
+      Future<void> work() async {
+        runCount++;
+        if (runCount == 1) {
+          await firstBlocker.future;
+        }
+      }
+
+      final first = runGuardedSync(
+        () => inFlight,
+        (v) => inFlight = v,
+        () => pending,
+        (v) => pending = v,
+        work,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Several calls arrive while the first is still running.
+      await runGuardedSync(() => inFlight, (v) => inFlight = v, () => pending, (v) => pending = v, work);
+      await runGuardedSync(() => inFlight, (v) => inFlight = v, () => pending, (v) => pending = v, work);
+      await runGuardedSync(() => inFlight, (v) => inFlight = v, () => pending, (v) => pending = v, work);
+
+      firstBlocker.complete();
+      await first;
+
+      // Collapsed into exactly one trailing run, not one per skipped call.
+      expect(runCount, 2);
+      expect(pending, isFalse);
+    },
+  );
 
   test('runGuardedSync allows a later call once the previous one has finished', () async {
     var inFlight = false;
+    var pending = false;
     var runCount = 0;
 
     Future<void> work() async {
       runCount++;
     }
 
-    await runGuardedSync(() => inFlight, (v) => inFlight = v, work);
-    await runGuardedSync(() => inFlight, (v) => inFlight = v, work);
+    await runGuardedSync(() => inFlight, (v) => inFlight = v, () => pending, (v) => pending = v, work);
+    await runGuardedSync(() => inFlight, (v) => inFlight = v, () => pending, (v) => pending = v, work);
 
     expect(runCount, 2);
     expect(inFlight, isFalse);
@@ -64,6 +186,7 @@ void main() {
     'permanently block every later sync attempt',
     () async {
       var inFlight = false;
+      var pending = false;
       var runCount = 0;
 
       Future<void> throwingWork() async {
@@ -72,12 +195,18 @@ void main() {
       }
 
       await expectLater(
-        runGuardedSync(() => inFlight, (v) => inFlight = v, throwingWork),
+        runGuardedSync(() => inFlight, (v) => inFlight = v, () => pending, (v) => pending = v, throwingWork),
         throwsException,
       );
       expect(inFlight, isFalse);
 
-      await runGuardedSync(() => inFlight, (v) => inFlight = v, () async => runCount++);
+      await runGuardedSync(
+        () => inFlight,
+        (v) => inFlight = v,
+        () => pending,
+        (v) => pending = v,
+        () async => runCount++,
+      );
 
       expect(runCount, 2);
     },
