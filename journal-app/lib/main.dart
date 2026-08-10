@@ -186,7 +186,9 @@ Future<void> performSync(
   if (currentUser == null) return;
   await runSyncWithStatus(status, () async {
     final authClient = await authenticatedClient();
-    if (authClient == null) return;
+    if (authClient == null) {
+      throw StateError('No authenticated Drive client available');
+    }
     await doSync(authClient);
   });
 }

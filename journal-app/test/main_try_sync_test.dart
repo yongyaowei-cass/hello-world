@@ -71,8 +71,15 @@ void main() {
     expect(doSyncCalled, isTrue);
   });
 
+  // Regression test for the reviewed bug: when authenticatedClient() returns
+  // null (reachable offline, or when a cached token can't be refreshed), the
+  // guarded closure used to return normally instead of throwing, so
+  // runSyncWithStatus fell through to `synced` even though nothing was
+  // synced. Simulating a prior successful sync (status starts at `synced`)
+  // makes that false-success bug observable: without the fix this test's
+  // status would stay `synced` instead of correctly flipping to `offline`.
   test('performSync does not call doSync when authenticatedClient returns null', () async {
-    final status = ValueNotifier(SyncStatus.offline);
+    final status = ValueNotifier(SyncStatus.synced);
     var doSyncCalled = false;
 
     await performSync(
@@ -85,6 +92,7 @@ void main() {
     );
 
     expect(doSyncCalled, isFalse);
+    expect(status.value, SyncStatus.offline);
   });
 
   // Regression test for the reviewed bug: previously authenticatedClient()
