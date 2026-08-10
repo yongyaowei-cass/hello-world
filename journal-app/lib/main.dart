@@ -44,6 +44,48 @@ Future<void> runSyncWithStatus(
   }
 }
 
+/// Attempts a silent (no user interaction) sign-in via [signInSilently] and,
+/// if it finds a cached session, kicks off [trySync] and reports success.
+/// Returns false (without syncing) if there's no cached session or
+/// [signInSilently] throws — callers should fall back to showing an explicit
+/// sign-in screen in that case. A [signInSilently] failure never propagates
+/// (a failed background check shouldn't crash the app); [trySync] itself is
+/// expected to already guard its own failures the way [runSyncWithStatus]
+/// does. Extracted as a top-level function, typed against a plain nullable
+/// [Object] rather than [GoogleSignInAccount] (which has no public
+/// constructor), so it's directly unit-testable without a real GoogleSignIn
+/// account (see test/main_silent_sign_in_test.dart).
+@visibleForTesting
+Future<bool> attemptSilentSignIn(
+  Future<Object?> Function() signInSilently,
+  Future<void> Function() trySync,
+) async {
+  Object? account;
+  try {
+    account = await signInSilently();
+  } catch (_) {
+    return false;
+  }
+  if (account == null) return false;
+  await trySync();
+  return true;
+}
+
+/// Per the design spec, sync should run "periodically (and on app
+/// foreground / connectivity-restored)". This implements the foreground
+/// half: only the transition to [AppLifecycleState.resumed] (the app
+/// coming back to the front) triggers [trySync]; other lifecycle states
+/// (inactive, paused, detached, hidden) are no-ops. Extracted as a
+/// top-level function so the state-filtering rule is directly
+/// unit-testable without a real WidgetsBinding lifecycle event or a
+/// signed-in AuthService/Drive client (see test/main_lifecycle_sync_test.dart).
+@visibleForTesting
+void handleAppLifecycleStateForSync(AppLifecycleState state, VoidCallback trySync) {
+  if (state == AppLifecycleState.resumed) {
+    trySync();
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
@@ -62,7 +104,7 @@ class JournalApp extends StatefulWidget {
   State<JournalApp> createState() => _JournalAppState();
 }
 
-class _JournalAppState extends State<JournalApp> {
+class _JournalAppState extends State<JournalApp> with WidgetsBindingObserver {
   final _authService = AuthService();
   final _syncService = SyncService();
   final _photoSyncService = PhotoSyncService(saveLocalBytes: saveLocalPhotoBytes);
@@ -70,17 +112,50 @@ class _JournalAppState extends State<JournalApp> {
   final _syncStatus = ValueNotifier(SyncStatus.offline);
   GeminiReflectionService? _reflectionService;
 
+  // True while the startup silent-sign-in check (see attemptSilentSignIn) is
+  // in flight; the app shows a brief loading state instead of SignInScreen
+  // while this is true, so a returning user isn't asked to tap "Sign in with
+  // Google" on every launch.
+  bool _checkingSilentSignIn = true;
+  bool _signedInSilently = false;
+
   @override
   void initState() {
     super.initState();
     if (_geminiApiKey.isNotEmpty) {
       _reflectionService = GeminiReflectionService(apiKey: _geminiApiKey);
     }
+    WidgetsBinding.instance.addObserver(this);
     Connectivity().onConnectivityChanged.listen((result) {
       if (!result.contains(ConnectivityResult.none)) {
         _trySync();
       }
     });
+    _initSilentSignIn();
+  }
+
+  Future<void> _initSilentSignIn() async {
+    final signedIn = await attemptSilentSignIn(_authService.signInSilently, _trySync);
+    if (mounted) {
+      setState(() {
+        _checkingSilentSignIn = false;
+        _signedInSilently = signedIn;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Design spec: sync "periodically (and on app foreground /
+    // connectivity-restored)". This covers the foreground half; connectivity
+    // is covered by the onConnectivityChanged listener above.
+    handleAppLifecycleStateForSync(state, _trySync);
   }
 
   Future<void> _trySync() async {
@@ -109,27 +184,43 @@ class _JournalAppState extends State<JournalApp> {
     return MaterialApp(
       title: 'Journal',
       home: Builder(
-        builder: (context) => SignInScreen(
-          onSignIn: () async {
-            await _authService.signIn();
-            await _trySync();
-            if (context.mounted) _openList(context);
-          },
-          onSkip: () => _openList(context),
-        ),
+        builder: (context) {
+          if (_checkingSilentSignIn) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(key: Key('silentSignInLoading')),
+              ),
+            );
+          }
+          if (_signedInSilently) {
+            // A cached session was restored without user interaction: go
+            // straight to the entry list instead of SignInScreen.
+            return _buildEntryList(context);
+          }
+          return SignInScreen(
+            onSignIn: () async {
+              await _authService.signIn();
+              await _trySync();
+              if (context.mounted) _openList(context);
+            },
+            onSkip: () => _openList(context),
+          );
+        },
       ),
     );
   }
 
+  Widget _buildEntryList(BuildContext context) {
+    return EntryListScreen(
+      repository: widget.entryRepository,
+      onCreateEntry: () => _openEditor(context, null),
+      onOpenEntry: (entry) => _openDetail(context, entry),
+      syncStatus: _syncStatus,
+    );
+  }
+
   void _openList(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (context) => EntryListScreen(
-        repository: widget.entryRepository,
-        onCreateEntry: () => _openEditor(context, null),
-        onOpenEntry: (entry) => _openDetail(context, entry),
-        syncStatus: _syncStatus,
-      ),
-    ));
+    Navigator.of(context).push(MaterialPageRoute(builder: _buildEntryList));
   }
 
   void _openEditor(BuildContext context, JournalEntry? existing) {

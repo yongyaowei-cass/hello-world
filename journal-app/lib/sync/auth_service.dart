@@ -14,6 +14,13 @@ class AuthService {
 
   Future<GoogleSignInAccount?> signIn() => _googleSignIn.signIn();
 
+  /// Attempts to restore a previously-signed-in session without user
+  /// interaction (e.g. on cold app start). Returns null if there is no
+  /// cached session or it can't be silently restored (never signed in
+  /// before, or the session expired) — callers should fall back to an
+  /// explicit sign-in flow in that case.
+  Future<GoogleSignInAccount?> signInSilently() => _googleSignIn.signInSilently();
+
   Future<void> signOut() => _googleSignIn.signOut();
 
   Future<gapis.AuthClient?> authenticatedClient() =>

@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for Drive sync and Gemini reflection network calls in
+         release builds (the debug-only manifest's INTERNET permission does
+         not get merged into non-debug variants). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="journal_app"
         android:name="${applicationName}"
