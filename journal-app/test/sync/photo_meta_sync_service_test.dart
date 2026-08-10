@@ -177,6 +177,34 @@ void main() {
     await sync.sync(local, remote);
 
     expect(remote.remote['p1']!.entryId, 'e1');
+    // The replica must also adopt the correction locally -- otherwise it
+    // stays wrong forever, even though it correctly refrains from pushing
+    // its own stale value back over the fix.
+    expect(local.getById('p1')!.entryId, 'e1');
+  });
+
+  test('a stale local replica with a placeholder entryId pulls the corrected value from remote', () async {
+    // Isolates the entryId-pull behavior: driveFileId already agrees on both
+    // sides (no driveFileId work needed), so the only outstanding diff is
+    // entryId. Before the fix, there was no pull path for entryId at all --
+    // the replica would stay stuck on '' forever, even though the correct
+    // value was sitting on Drive the whole time.
+    await local.save(PhotoAsset(
+      id: 'p1',
+      entryId: '', // stale replica -- never corrected locally
+      createdAt: DateTime.utc(2026, 8, 9),
+      driveFileId: 'drive-file-p1',
+    ));
+    remote.remote['p1'] = RemotePhotoMeta(
+      id: 'p1',
+      entryId: 'e1', // the correction, already on remote
+      createdAt: DateTime.utc(2026, 8, 9),
+      driveFileId: 'drive-file-p1',
+    );
+
+    await sync.sync(local, remote);
+
+    expect(local.getById('p1')!.entryId, 'e1');
   });
 
   test('photo metadata already in sync on both sides is left unchanged', () async {

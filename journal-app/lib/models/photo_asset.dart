@@ -13,10 +13,10 @@ class PhotoAsset {
   final String? localPath;
   final String? driveFileId;
 
-  PhotoAsset copyWith({String? localPath, String? driveFileId}) {
+  PhotoAsset copyWith({String? localPath, String? driveFileId, String? entryId}) {
     return PhotoAsset(
       id: id,
-      entryId: entryId,
+      entryId: entryId ?? this.entryId,
       createdAt: createdAt,
       localPath: localPath ?? this.localPath,
       driveFileId: driveFileId ?? this.driveFileId,

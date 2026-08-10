@@ -46,12 +46,24 @@ class PhotoMetaSyncService {
         await remote.upload(_toRemoteMeta(localAsset));
       } else if (localAsset != null && remoteMeta != null) {
         final localMeta = _toRemoteMeta(localAsset);
-        if (localAsset.driveFileId == null && remoteMeta.driveFileId != null) {
-          // Remote already knows the driveFileId (another device uploaded
-          // it) but this local record doesn't yet -- pull it in, without
-          // touching localPath, so the binary sync's download branch picks
-          // it up.
-          await local.save(localAsset.copyWith(driveFileId: remoteMeta.driveFileId));
+
+        // Pull side: adopt any correction remote already has that this
+        // local replica is still missing. Both pulls are gathered into a
+        // single save so a record needing both corrections catches up in
+        // one pass instead of two.
+        final needsDriveFileIdPull =
+            localAsset.driveFileId == null && remoteMeta.driveFileId != null;
+        final needsEntryIdPull =
+            localAsset.entryId.isEmpty && remoteMeta.entryId.isNotEmpty;
+        if (needsDriveFileIdPull || needsEntryIdPull) {
+          // Remote already knows a value (driveFileId and/or entryId) that
+          // this local record doesn't yet -- pull it/them in, without
+          // touching localPath, so the binary sync's download branch (for
+          // driveFileId) still works off an untouched localPath.
+          await local.save(localAsset.copyWith(
+            driveFileId: needsDriveFileIdPull ? remoteMeta.driveFileId : null,
+            entryId: needsEntryIdPull ? remoteMeta.entryId : null,
+          ));
         } else if ((localAsset.driveFileId != null && remoteMeta.driveFileId == null) ||
             (localAsset.entryId.isNotEmpty && remoteMeta.entryId.isEmpty)) {
           // Push local's metadata, but only for the two specific one-way
@@ -82,7 +94,15 @@ class PhotoMetaSyncService {
           // forth.
           await remote.upload(localMeta);
         }
-        // Otherwise both sides already fully agree -- nothing to do.
+        // Otherwise both sides already fully agree -- nothing to do. This
+        // relies on the same one-way-transition invariant as the push branch
+        // above: driveFileId only ever goes null -> a single stable value,
+        // and entryId only ever goes '' -> a single stable value, each set
+        // by exactly one origin device. So if neither side is missing a
+        // value the other has (the pull branch), and neither side has a
+        // value the other is still missing (the push branch), there's no
+        // remaining state in which the two non-null/non-empty values could
+        // differ -- both must already hold the same final value.
       }
     }
   }
