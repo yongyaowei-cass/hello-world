@@ -163,6 +163,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
               icon: const Icon(Icons.add_photo_alternate),
               onPressed: _addPhoto,
             ),
+            SizedBox.shrink(key: Key('photoCount-${_photoIds.length}')),
           ],
         ),
       ),

@@ -171,21 +171,20 @@ void main() {
     // _addPhoto awaits real Hive I/O (photoRepository.save) before its
     // setState adds the id to _photoIds, so the tap must stay inside
     // runAsync (same reasoning as the check-button taps above). We poll on
-    // photoRepo state as the earliest possible signal that the write has
-    // landed, then do one extra delay+pump cycle as a buffer: Hive's
-    // Keystore can become visible slightly ahead of the awaited Future
-    // actually resolving, and it's the Future resolving that lets
-    // _addPhoto's setState run and update _photoIds.
+    // a rendered widget keyed with the current photo count rather than repo
+    // state: Hive's Keystore can reflect a write before the calling
+    // widget's own await/setState has actually resumed and run, so polling
+    // repo state is an unreliable completion signal. The keyed widget can
+    // only appear once _photoIds genuinely has 1 element AND a frame has
+    // been pumped reflecting it.
     await tester.runAsync(() async {
       await tester.tap(find.byIcon(Icons.add_photo_alternate));
       var attempts = 0;
-      while (photoRepo.getForEntry('').isEmpty && attempts < 100) {
+      while (find.byKey(const Key('photoCount-1')).evaluate().isEmpty && attempts < 100) {
         await Future.delayed(const Duration(milliseconds: 10));
         await tester.pump();
         attempts++;
       }
-      await Future.delayed(const Duration(milliseconds: 20));
-      await tester.pump();
     });
     await tester.pumpAndSettle();
 
@@ -208,5 +207,6 @@ void main() {
     final asset = photoRepo.getById(saved!.photoIds.first);
     expect(asset, isNotNull);
     expect(asset!.localPath, tempImage.path);
+    expect(photoRepo.getById(saved!.photoIds.first)!.entryId, saved!.id);
   });
 }
