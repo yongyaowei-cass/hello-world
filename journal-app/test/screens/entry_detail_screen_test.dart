@@ -185,4 +185,33 @@ void main() {
 
     expect(find.byKey(const Key('photo-p1')), findsOneWidget);
   });
+
+  testWidgets('does not crash and skips rendering a photo whose metadata was pulled but binary not yet downloaded', (tester) async {
+    // Simulates a device that has synced an entry's photoIds and pulled the
+    // PhotoAsset metadata record from Drive, but whose binary sync hasn't
+    // caught up yet: the record exists locally with localPath: null.
+    final entryWithPhoto = entry.copyWith(photoIds: ['p1']);
+    await tester.runAsync(() async {
+      await photoRepo.save(PhotoAsset(
+        id: 'p1',
+        entryId: 'e1',
+        createdAt: DateTime.utc(2026, 8, 9),
+        driveFileId: 'drive-file-p1',
+      ));
+      await repo.save(entryWithPhoto);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryDetailScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        entry: entryWithPhoto,
+        onEdit: (_) {},
+        onDeleted: () {},
+      ),
+    ));
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('photo-p1')), findsNothing);
+  });
 }

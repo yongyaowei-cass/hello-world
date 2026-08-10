@@ -14,7 +14,9 @@ import 'screens/entry_list_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'sync/auth_service.dart';
 import 'sync/google_drive_entry_store.dart';
+import 'sync/google_drive_photo_meta_store.dart';
 import 'sync/google_drive_photo_store.dart';
+import 'sync/photo_meta_sync_service.dart';
 import 'sync/photo_sync_service.dart';
 import 'sync/sync_service.dart';
 
@@ -43,6 +45,7 @@ class _JournalAppState extends State<JournalApp> {
   final _authService = AuthService();
   final _syncService = SyncService();
   final _photoSyncService = PhotoSyncService(saveLocalBytes: saveLocalPhotoBytes);
+  final _photoMetaSyncService = PhotoMetaSyncService();
   final _syncStatus = ValueNotifier(SyncStatus.offline);
   GeminiReflectionService? _reflectionService;
 
@@ -66,8 +69,17 @@ class _JournalAppState extends State<JournalApp> {
     if (authClient == null) return;
     _syncStatus.value = SyncStatus.syncing;
     final store = GoogleDriveEntryStore(drive.DriveApi(authClient));
+    final photoMetaStore = GoogleDrivePhotoMetaStore(drive.DriveApi(authClient));
+    final photoStore = GoogleDrivePhotoStore(drive.DriveApi(authClient));
     await _syncService.sync(widget.entryRepository, store);
-    await _photoSyncService.sync(widget.photoRepository, GoogleDrivePhotoStore(drive.DriveApi(authClient)));
+    // Pull metadata for photos this device doesn't know about yet (so the
+    // binary sync below has something to download) and push metadata for
+    // photos Drive doesn't know about yet.
+    await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
+    await _photoSyncService.sync(widget.photoRepository, photoStore);
+    // Run metadata sync again so a driveFileId the binary sync just
+    // discovered (on upload) gets published to Drive for other devices.
+    await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
     _syncStatus.value = SyncStatus.synced;
   }
 

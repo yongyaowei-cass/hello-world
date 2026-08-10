@@ -88,7 +88,7 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
               spacing: 8,
               children: [
                 for (final id in _entry.photoIds)
-                  if (widget.photoRepository.getById(id) != null)
+                  if (widget.photoRepository.getById(id)?.localPath != null)
                     SizedBox(
                       key: Key('photo-$id'),
                       width: 64,
