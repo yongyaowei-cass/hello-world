@@ -145,6 +145,33 @@ void main() {
     expect(saved!.tags, contains('gratitude'));
   });
 
+  testWidgets('body is scrollable so a long entry does not overflow and controls stay reachable', (tester) async {
+    final existing = JournalEntry(
+      id: 'e1',
+      createdAt: DateTime.utc(2026, 8, 1),
+      updatedAt: DateTime.utc(2026, 8, 1),
+      text: List.filled(200, 'A long journal entry line.').join('\n'),
+      mood: 3,
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryEditorScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        existingEntry: existing,
+        onSaved: (_) {},
+      ),
+    ));
+
+    // A bare Column overflowing a screenful of text (via the unbounded
+    // TextField) throws a RenderFlex overflow error during layout; a
+    // SingleChildScrollView instead lets the content grow past the
+    // viewport without error, keeping the tag input and save controls
+    // reachable.
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+  });
+
   testWidgets('picking a photo attaches it to the saved entry', (tester) async {
     // Real dart:io calls (Directory.createTemp, File.writeAsBytes) must run
     // inside runAsync: testWidgets bodies execute in a FakeAsync zone by

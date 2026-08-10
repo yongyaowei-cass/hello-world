@@ -36,6 +36,19 @@ class GeminiReflectionService {
     }
 
     final decoded = jsonDecode(response.body) as Map;
-    return decoded['candidates'][0]['content']['parts'][0]['text'] as String;
+    final candidates = decoded['candidates'] as List?;
+    if (candidates == null || candidates.isEmpty) {
+      throw Exception('Gemini returned no candidates (the response may have been safety-blocked)');
+    }
+    final content = (candidates.first as Map?)?['content'] as Map?;
+    final parts = content?['parts'] as List?;
+    if (parts == null || parts.isEmpty) {
+      throw Exception('Gemini response missing content');
+    }
+    final text = (parts.first as Map?)?['text'];
+    if (text is! String) {
+      throw Exception('Gemini response missing content');
+    }
+    return text;
   }
 }

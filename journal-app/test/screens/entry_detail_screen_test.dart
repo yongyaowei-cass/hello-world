@@ -143,6 +143,44 @@ void main() {
     expect(repo.getById('e1')!.aiReflectionQuestion, 'What made today feel worth writing about?');
   });
 
+  testWidgets('a failing Reflect call resets the button and shows a snackbar instead of hanging', (tester) async {
+    final client = MockClient((request) async => http.Response('server error', 500));
+    final reflectionService = GeminiReflectionService(apiKey: 'test-key', httpClient: client);
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryDetailScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        entry: entry,
+        onEdit: (_) {},
+        onDeleted: () {},
+        reflectionService: reflectionService,
+      ),
+    ));
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Reflect'));
+      var attempts = 0;
+      while (find.byType(SnackBar).evaluate().isEmpty && attempts < 100) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+        attempts++;
+      }
+    });
+    await tester.pump();
+
+    // The button must be re-enabled (back to "Reflect", not stuck on
+    // "Reflecting...") and a snackbar should explain something went wrong.
+    expect(find.text('Reflect'), findsOneWidget);
+    expect(find.text('Reflecting...'), findsNothing);
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(repo.getById('e1')!.aiReflectionQuestion, isNull);
+
+    // Let the snackbar's auto-dismiss timer finish so no pending timers leak
+    // into the next test.
+    await tester.pumpAndSettle(const Duration(seconds: 5));
+  });
+
   testWidgets('Reflect button is hidden when no reflectionService is provided', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: EntryDetailScreen(
@@ -184,6 +222,55 @@ void main() {
     ));
 
     expect(find.byKey(const Key('photo-p1')), findsOneWidget);
+  });
+
+  testWidgets('body is scrollable so a long entry does not overflow and controls stay reachable', (tester) async {
+    final longEntry = entry.copyWith(text: List.filled(200, 'A long journal entry line.').join('\n'));
+    await tester.runAsync(() async {
+      await repo.save(longEntry);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryDetailScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        entry: longEntry,
+        onEdit: (_) {},
+        onDeleted: () {},
+      ),
+    ));
+
+    // A bare Column overflowing a screenful of text throws a RenderFlex
+    // overflow error during layout; a SingleChildScrollView instead lets the
+    // content grow past the viewport without error.
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+  });
+
+  testWidgets('refreshes displayed content when the underlying entry is updated elsewhere (e.g. after an edit)', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: EntryDetailScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        entry: entry,
+        onEdit: (_) {},
+        onDeleted: () {},
+      ),
+    ));
+
+    expect(find.text('Detail view entry'), findsOneWidget);
+
+    // Simulate what happens when the editor screen (pushed on top of this
+    // one) saves an edit and pops back: the repository record changes but
+    // this screen was never told about it directly.
+    final edited = entry.copyWith(text: 'Edited via the editor screen');
+    await tester.runAsync(() async {
+      await repo.save(edited);
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edited via the editor screen'), findsOneWidget);
+    expect(find.text('Detail view entry'), findsNothing);
   });
 
   testWidgets('does not crash and skips rendering a photo whose metadata was pulled but binary not yet downloaded', (tester) async {

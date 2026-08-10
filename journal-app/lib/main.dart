@@ -23,6 +23,27 @@ import 'sync/sync_service.dart';
 // Replace with a real key restricted in Google Cloud Console (see spec: Architecture).
 const _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
+/// Runs [doSync], driving [status] through syncing -> synced on success or
+/// syncing -> offline on failure. Never rethrows: a failed background sync
+/// shouldn't crash the app, and leaving [status] stuck on `syncing` forever
+/// (the pre-fix behavior when a Drive call threw) hides that a retry is
+/// even needed. Extracted as a top-level function so it's directly
+/// unit-testable without needing a real/fake GoogleSignIn account or Drive
+/// client (see test/main_sync_status_test.dart).
+@visibleForTesting
+Future<void> runSyncWithStatus(
+  ValueNotifier<SyncStatus> status,
+  Future<void> Function() doSync,
+) async {
+  status.value = SyncStatus.syncing;
+  try {
+    await doSync();
+    status.value = SyncStatus.synced;
+  } catch (_) {
+    status.value = SyncStatus.offline;
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
@@ -67,20 +88,20 @@ class _JournalAppState extends State<JournalApp> {
     if (account == null) return;
     final authClient = await _authService.authenticatedClient();
     if (authClient == null) return;
-    _syncStatus.value = SyncStatus.syncing;
-    final store = GoogleDriveEntryStore(drive.DriveApi(authClient));
-    final photoMetaStore = GoogleDrivePhotoMetaStore(drive.DriveApi(authClient));
-    final photoStore = GoogleDrivePhotoStore(drive.DriveApi(authClient));
-    await _syncService.sync(widget.entryRepository, store);
-    // Pull metadata for photos this device doesn't know about yet (so the
-    // binary sync below has something to download) and push metadata for
-    // photos Drive doesn't know about yet.
-    await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
-    await _photoSyncService.sync(widget.photoRepository, photoStore);
-    // Run metadata sync again so a driveFileId the binary sync just
-    // discovered (on upload) gets published to Drive for other devices.
-    await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
-    _syncStatus.value = SyncStatus.synced;
+    await runSyncWithStatus(_syncStatus, () async {
+      final store = GoogleDriveEntryStore(drive.DriveApi(authClient));
+      final photoMetaStore = GoogleDrivePhotoMetaStore(drive.DriveApi(authClient));
+      final photoStore = GoogleDrivePhotoStore(drive.DriveApi(authClient));
+      await _syncService.sync(widget.entryRepository, store);
+      // Pull metadata for photos this device doesn't know about yet (so the
+      // binary sync below has something to download) and push metadata for
+      // photos Drive doesn't know about yet.
+      await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
+      await _photoSyncService.sync(widget.photoRepository, photoStore);
+      // Run metadata sync again so a driveFileId the binary sync just
+      // discovered (on upload) gets published to Drive for other devices.
+      await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
+    });
   }
 
   @override

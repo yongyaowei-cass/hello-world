@@ -78,6 +78,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
       localPath: file.path,
     );
     await widget.photoRepository.save(asset);
+    if (!mounted) return;
     setState(() => _photoIds.add(asset.id));
   }
 
@@ -116,7 +117,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
           IconButton(icon: const Icon(Icons.check), onPressed: _save),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

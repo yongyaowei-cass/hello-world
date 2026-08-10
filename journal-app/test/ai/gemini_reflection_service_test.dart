@@ -43,4 +43,43 @@ void main() {
 
     expect(() => service.reflect('anything'), throwsException);
   });
+
+  test('reflect throws a clear error when Gemini returns an empty candidates list (e.g. safety block)', () async {
+    final client = MockClient((request) async {
+      return http.Response(jsonEncode({'candidates': <Object?>[]}), 200);
+    });
+    final service = GeminiReflectionService(apiKey: 'test-key', httpClient: client);
+
+    expect(
+      () => service.reflect('anything'),
+      throwsA(isA<Exception>().having(
+        (e) => e.toString(),
+        'message',
+        contains('no candidates'),
+      )),
+    );
+  });
+
+  test('reflect throws a clear error when a candidate has content but no parts', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode({
+          'candidates': [
+            {'content': <String, Object?>{}}
+          ]
+        }),
+        200,
+      );
+    });
+    final service = GeminiReflectionService(apiKey: 'test-key', httpClient: client);
+
+    expect(
+      () => service.reflect('anything'),
+      throwsA(isA<Exception>().having(
+        (e) => e.toString(),
+        'message',
+        contains('missing content'),
+      )),
+    );
+  });
 }
