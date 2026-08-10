@@ -150,6 +150,35 @@ void main() {
     expect(remote.remote['p1']!.entryId, 'e1');
   });
 
+  test('a stale local replica with a placeholder entryId does not push it back over a corrected remote value', () async {
+    // Reproduces the oscillation the reviewer flagged: device A creates a
+    // photo with entryId: '' and syncs; device B pulls that replica down,
+    // also with entryId: ''. A later corrects its own entryId to 'e1' and
+    // pushes the fix to remote. Now B syncs again -- its local replica is
+    // still stale ('' ), while remote already has the correction ('e1').
+    // Under the old "local always wins on any diff" rule, B would push its
+    // stale '' right back over A's fix. The narrowed rule must NOT push here
+    // -- entryId only has a defined pull/push direction for the
+    // ''->non-empty transition on the *pushing* side, and B's local side is
+    // still ''.
+    await local.save(PhotoAsset(
+      id: 'p1',
+      entryId: '', // B's stale replica -- never corrected locally
+      createdAt: DateTime.utc(2026, 8, 9),
+      driveFileId: 'drive-file-p1',
+    ));
+    remote.remote['p1'] = RemotePhotoMeta(
+      id: 'p1',
+      entryId: 'e1', // A's correction, already pushed to remote
+      createdAt: DateTime.utc(2026, 8, 9),
+      driveFileId: 'drive-file-p1',
+    );
+
+    await sync.sync(local, remote);
+
+    expect(remote.remote['p1']!.entryId, 'e1');
+  });
+
   test('photo metadata already in sync on both sides is left unchanged', () async {
     await local.save(PhotoAsset(
       id: 'p1',

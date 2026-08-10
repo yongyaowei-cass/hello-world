@@ -52,18 +52,34 @@ class PhotoMetaSyncService {
           // touching localPath, so the binary sync's download branch picks
           // it up.
           await local.save(localAsset.copyWith(driveFileId: remoteMeta.driveFileId));
-        } else if (!_metaEquals(localMeta, remoteMeta)) {
-          // Local and remote disagree on some field other than the
-          // null/non-null driveFileId case handled above -- most notably
-          // entryId, which entry_editor_screen.dart's _addPhoto() initially
-          // saves as '' for a brand-new entry and only corrects once _save()
-          // runs. If a sync fires in between (and the binary upload also
-          // completes in that window), driveFileId can end up settled
-          // (non-null on both sides) while entryId is still stale on
-          // remote. There's no updatedAt/version field on PhotoAsset to do
-          // real last-write-wins, so treat local as authoritative and push
-          // it: the creating device is the only one that ever changes these
-          // fields post-creation, and only during this brief window.
+        } else if ((localAsset.driveFileId != null && remoteMeta.driveFileId == null) ||
+            (localAsset.entryId.isNotEmpty && remoteMeta.entryId.isEmpty)) {
+          // Push local's metadata, but only for the two specific one-way
+          // transitions this device can ever be the origin of -- never for
+          // an arbitrary diff:
+          //
+          //  - driveFileId: null -> non-null. This device's own binary
+          //    upload just discovered the driveFileId (the reverse, pull,
+          //    direction is handled above); once set, a driveFileId never
+          //    reverts to null, so this can't flip back.
+          //  - entryId: '' -> non-empty. entry_editor_screen.dart's
+          //    _addPhoto() initially saves a brand-new photo with
+          //    entryId: '' and only corrects it once _save() runs. If a
+          //    sync fires in between (and the binary upload also completes
+          //    in that window), driveFileId can end up settled while
+          //    entryId is still '' on remote.
+          //
+          // Both are one-way: the "before" state (null / '') never comes
+          // back once corrected. That's what makes this safe without a
+          // version/timestamp field on PhotoAsset -- a device whose local
+          // replica still holds the "before" value (e.g. it merely pulled a
+          // placeholder from another device, rather than being the device
+          // that produced the correction) never satisfies the "after" side
+          // of either check, so it can never push a stale value back over a
+          // correction another device already made. The old rule pushed on
+          // *any* diff, which had no such guarantee and could oscillate
+          // forever between two devices trading a stale value back and
+          // forth.
           await remote.upload(localMeta);
         }
         // Otherwise both sides already fully agree -- nothing to do.
@@ -77,10 +93,4 @@ class PhotoMetaSyncService {
         createdAt: asset.createdAt,
         driveFileId: asset.driveFileId,
       );
-
-  bool _metaEquals(RemotePhotoMeta a, RemotePhotoMeta b) =>
-      a.id == b.id &&
-      a.entryId == b.entryId &&
-      a.createdAt == b.createdAt &&
-      a.driveFileId == b.driveFileId;
 }
