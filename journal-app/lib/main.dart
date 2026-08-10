@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
@@ -49,9 +51,22 @@ Future<void> runSyncWithStatus(
 /// Returns false (without syncing) if there's no cached session or
 /// [signInSilently] throws — callers should fall back to showing an explicit
 /// sign-in screen in that case. A [signInSilently] failure never propagates
-/// (a failed background check shouldn't crash the app); [trySync] itself is
-/// expected to already guard its own failures the way [runSyncWithStatus]
-/// does. Extracted as a top-level function, typed against a plain nullable
+/// (a failed background check shouldn't crash the app).
+///
+/// [trySync] is fired and forgotten — started, but never awaited — so this
+/// function's returned Future resolves as soon as [signInSilently] answers,
+/// regardless of how long the sync takes or whether it ultimately succeeds
+/// or fails. This matters concretely: a caller (see `_initSilentSignIn`)
+/// typically gates a loading spinner on this function's result. Previously
+/// [trySync] was awaited directly here, so on a cold, offline launch with a
+/// cached Google session, a throw from the sync (e.g.
+/// `AuthService.authenticatedClient()` failing before it ever reaches
+/// [runSyncWithStatus]'s own guard) propagated out of this function, which
+/// aborted the caller's `await` before it could turn off the spinner —
+/// freezing the app forever on a bare loading indicator. Any error from
+/// [trySync] is now swallowed here too (on top of [runSyncWithStatus]'s own
+/// guard), so it can never surface as an unhandled Future error either.
+/// Extracted as a top-level function, typed against a plain nullable
 /// [Object] rather than [GoogleSignInAccount] (which has no public
 /// constructor), so it's directly unit-testable without a real GoogleSignIn
 /// account (see test/main_silent_sign_in_test.dart).
@@ -67,7 +82,7 @@ Future<bool> attemptSilentSignIn(
     return false;
   }
   if (account == null) return false;
-  await trySync();
+  unawaited(trySync().catchError((_) {}));
   return true;
 }
 
@@ -83,6 +98,38 @@ Future<bool> attemptSilentSignIn(
 void handleAppLifecycleStateForSync(AppLifecycleState state, VoidCallback trySync) {
   if (state == AppLifecycleState.resumed) {
     trySync();
+  }
+}
+
+/// Runs [work] unless a previous call through this same guard is still
+/// running, in which case this call is a no-op. [isInFlight]/[setInFlight]
+/// track that state for the caller (typically backed by a single instance
+/// field) so the guard rule itself has no dependency on any particular
+/// state container and is directly unit-testable (see
+/// test/main_sync_guard_test.dart). The flag is always reset via `finally`,
+/// even when [work] throws, so a single failure can't permanently wedge
+/// every later call into a silent no-op.
+///
+/// Addresses the fact that [AppLifecycleState.resumed] fires whenever any
+/// external activity is dismissed — not just when the user genuinely
+/// reopens the app — including the photo picker and Google's own
+/// account-picker activity. Without this guard, picking a photo mid-edit or
+/// the sign-in flow itself could trigger a concurrent `_trySync()` call
+/// while another one (from `onSignIn`, `onSaved`, or the startup silent
+/// sign-in check) is still in flight, interleaving writes to `SyncStatus`
+/// and the sync services over the same repositories.
+@visibleForTesting
+Future<void> runGuardedSync(
+  bool Function() isInFlight,
+  void Function(bool) setInFlight,
+  Future<void> Function() work,
+) async {
+  if (isInFlight()) return;
+  setInFlight(true);
+  try {
+    await work();
+  } finally {
+    setInFlight(false);
   }
 }
 
@@ -118,6 +165,11 @@ class _JournalAppState extends State<JournalApp> with WidgetsBindingObserver {
   // Google" on every launch.
   bool _checkingSilentSignIn = true;
   bool _signedInSilently = false;
+
+  // Guards _trySync() against running concurrently with itself (see
+  // runGuardedSync's docstring for why AppLifecycleState.resumed alone makes
+  // this reachable). Always reset in runGuardedSync's `finally`.
+  bool _syncInFlight = false;
 
   @override
   void initState() {
@@ -158,25 +210,32 @@ class _JournalAppState extends State<JournalApp> with WidgetsBindingObserver {
     handleAppLifecycleStateForSync(state, _trySync);
   }
 
-  Future<void> _trySync() async {
-    final account = _authService.currentUser;
-    if (account == null) return;
-    final authClient = await _authService.authenticatedClient();
-    if (authClient == null) return;
-    await runSyncWithStatus(_syncStatus, () async {
-      final store = GoogleDriveEntryStore(drive.DriveApi(authClient));
-      final photoMetaStore = GoogleDrivePhotoMetaStore(drive.DriveApi(authClient));
-      final photoStore = GoogleDrivePhotoStore(drive.DriveApi(authClient));
-      await _syncService.sync(widget.entryRepository, store);
-      // Pull metadata for photos this device doesn't know about yet (so the
-      // binary sync below has something to download) and push metadata for
-      // photos Drive doesn't know about yet.
-      await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
-      await _photoSyncService.sync(widget.photoRepository, photoStore);
-      // Run metadata sync again so a driveFileId the binary sync just
-      // discovered (on upload) gets published to Drive for other devices.
-      await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
-    });
+  Future<void> _trySync() {
+    return runGuardedSync(
+      () => _syncInFlight,
+      (value) => _syncInFlight = value,
+      () async {
+        final account = _authService.currentUser;
+        if (account == null) return;
+        final authClient = await _authService.authenticatedClient();
+        if (authClient == null) return;
+        await runSyncWithStatus(_syncStatus, () async {
+          final store = GoogleDriveEntryStore(drive.DriveApi(authClient));
+          final photoMetaStore = GoogleDrivePhotoMetaStore(drive.DriveApi(authClient));
+          final photoStore = GoogleDrivePhotoStore(drive.DriveApi(authClient));
+          await _syncService.sync(widget.entryRepository, store);
+          // Pull metadata for photos this device doesn't know about yet (so
+          // the binary sync below has something to download) and push
+          // metadata for photos Drive doesn't know about yet.
+          await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
+          await _photoSyncService.sync(widget.photoRepository, photoStore);
+          // Run metadata sync again so a driveFileId the binary sync just
+          // discovered (on upload) gets published to Drive for other
+          // devices.
+          await _photoMetaSyncService.sync(widget.photoRepository, photoMetaStore);
+        });
+      },
+    );
   }
 
   @override
