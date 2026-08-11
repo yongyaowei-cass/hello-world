@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class SignInScreen extends StatelessWidget {
   const SignInScreen({super.key, required this.onSignIn, required this.onSkip});
@@ -10,14 +11,22 @@ class SignInScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Sync your journal across devices with Google Drive.'),
-            const SizedBox(height: 16),
-            ElevatedButton(onPressed: onSignIn, child: const Text('Sign in with Google')),
-            TextButton(onPressed: onSkip, child: const Text('Skip for now')),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Sync your journal across devices with Google Drive.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: onSignIn, child: const Text('Sign in with Google')),
+              const SizedBox(height: 8),
+              TextButton(onPressed: onSkip, child: const Text('Skip for now')),
+            ],
+          ),
         ),
       ),
     );
