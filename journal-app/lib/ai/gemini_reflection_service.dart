@@ -8,8 +8,12 @@ class GeminiReflectionService {
   final String apiKey;
   final http.Client _httpClient;
 
+  // gemini-flash-latest is a stable alias Google maintains to always point
+  // at their current recommended flash model, rather than a pinned version
+  // (e.g. gemini-2.5-flash) that eventually gets deprecated for new API
+  // keys/callers and starts returning 404s.
   static const _endpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
 
   Future<String> reflect(String entryText) async {
     final uri = Uri.parse(_endpoint);
