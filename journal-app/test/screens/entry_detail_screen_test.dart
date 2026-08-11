@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:journal_app/ai/gemini_reflection_service.dart';
+import 'package:journal_app/ai/groq_reflection_service.dart';
 import 'package:journal_app/data/entry_repository.dart';
 import 'package:journal_app/data/photo_repository.dart';
 import 'package:journal_app/models/journal_entry.dart';
@@ -98,16 +98,15 @@ void main() {
     expect(repo.getById('e1')!.deleted, isTrue);
   });
 
-  testWidgets('tapping Reflect calls Gemini and displays the question', (tester) async {
+  testWidgets('tapping Reflect calls Groq and displays the question', (tester) async {
     final client = MockClient((request) async {
       return http.Response(
         jsonEncode({
-          'candidates': [
+          'choices': [
             {
-              'content': {
-                'parts': [
-                  {'text': 'What made today feel worth writing about?'}
-                ]
+              'message': {
+                'role': 'assistant',
+                'content': 'What made today feel worth writing about?',
               }
             }
           ]
@@ -115,7 +114,7 @@ void main() {
         200,
       );
     });
-    final reflectionService = GeminiReflectionService(apiKey: 'test-key', httpClient: client);
+    final reflectionService = GroqReflectionService(apiKey: 'test-key', httpClient: client);
 
     await tester.pumpWidget(MaterialApp(
       home: EntryDetailScreen(
@@ -145,7 +144,7 @@ void main() {
 
   testWidgets('a failing Reflect call resets the button and shows a snackbar instead of hanging', (tester) async {
     final client = MockClient((request) async => http.Response('server error', 500));
-    final reflectionService = GeminiReflectionService(apiKey: 'test-key', httpClient: client);
+    final reflectionService = GroqReflectionService(apiKey: 'test-key', httpClient: client);
 
     await tester.pumpWidget(MaterialApp(
       home: EntryDetailScreen(

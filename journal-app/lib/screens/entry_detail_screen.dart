@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import '../ai/gemini_reflection_service.dart';
+import '../ai/groq_reflection_service.dart';
 import '../data/entry_repository.dart';
 import '../data/photo_repository.dart';
 import '../models/journal_entry.dart';
@@ -24,7 +24,7 @@ class EntryDetailScreen extends StatefulWidget {
   final JournalEntry entry;
   final void Function(JournalEntry) onEdit;
   final VoidCallback onDeleted;
-  final GeminiReflectionService? reflectionService;
+  final GroqReflectionService? reflectionService;
 
   @override
   State<EntryDetailScreen> createState() => _EntryDetailScreenState();

@@ -6,7 +6,7 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:googleapis_auth/googleapis_auth.dart' as gapis;
 import 'package:hive_flutter/hive_flutter.dart';
 
-import 'ai/gemini_reflection_service.dart';
+import 'ai/groq_reflection_service.dart';
 import 'data/entry_repository.dart';
 import 'data/photo_repository.dart';
 import 'models/journal_entry.dart';
@@ -23,8 +23,8 @@ import 'sync/photo_meta_sync_service.dart';
 import 'sync/photo_sync_service.dart';
 import 'sync/sync_service.dart';
 
-// Replace with a real key restricted in Google Cloud Console (see spec: Architecture).
-const _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+// Free tier, no credit card required: https://console.groq.com
+const _groqApiKey = String.fromEnvironment('GROQ_API_KEY');
 
 /// Runs [doSync], driving [status] through syncing -> synced on success or
 /// syncing -> offline on failure. Never rethrows: a failed background sync
@@ -217,7 +217,7 @@ class _JournalAppState extends State<JournalApp> with WidgetsBindingObserver {
   final _photoSyncService = PhotoSyncService(saveLocalBytes: saveLocalPhotoBytes);
   final _photoMetaSyncService = PhotoMetaSyncService();
   final _syncStatus = ValueNotifier(SyncStatus.offline);
-  GeminiReflectionService? _reflectionService;
+  GroqReflectionService? _reflectionService;
 
   // True while the startup silent-sign-in check (see attemptSilentSignIn) is
   // in flight; the app shows a brief loading state instead of SignInScreen
@@ -239,8 +239,8 @@ class _JournalAppState extends State<JournalApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    if (_geminiApiKey.isNotEmpty) {
-      _reflectionService = GeminiReflectionService(apiKey: _geminiApiKey);
+    if (_groqApiKey.isNotEmpty) {
+      _reflectionService = GroqReflectionService(apiKey: _groqApiKey);
     }
     WidgetsBinding.instance.addObserver(this);
     Connectivity().onConnectivityChanged.listen((result) {
