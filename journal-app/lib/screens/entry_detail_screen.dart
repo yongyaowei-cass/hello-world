@@ -5,6 +5,7 @@ import '../data/entry_repository.dart';
 import '../data/photo_repository.dart';
 import '../models/journal_entry.dart';
 import '../photos/photo_bytes_store.dart';
+import '../theme/app_theme.dart';
 
 const _moodEmoji = {1: '😞', 2: '😕', 3: '😐', 4: '🙂', 5: '😄'};
 
@@ -89,7 +90,7 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
                 if (entry.mood != null)
                   Text(_moodEmoji[entry.mood]!, style: const TextStyle(fontSize: 22)),
                 const SizedBox(height: 8),
-                Text(entry.text),
+                Text(entry.text, style: journalTextStyle),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,

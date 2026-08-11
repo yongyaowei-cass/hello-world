@@ -300,4 +300,20 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('photo-p1')), findsNothing);
   });
+
+  testWidgets('entry body text uses the journal serif style', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: EntryDetailScreen(
+        repository: repo,
+        photoRepository: photoRepo,
+        entry: entry,
+        onEdit: (_) {},
+        onDeleted: () {},
+      ),
+    ));
+
+    final bodyText = tester.widget<Text>(find.text('Detail view entry'));
+
+    expect(bodyText.style?.fontFamily, 'Lora');
+  });
 }
