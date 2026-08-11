@@ -302,4 +302,14 @@ void main() {
     // PhotoAsset/Hive record -- it just shouldn't be attached anymore.
     expect(photoRepo.getById(photoId), isNotNull);
   });
+
+  testWidgets('entry text field uses the journal serif style', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: EntryEditorScreen(repository: repo, photoRepository: photoRepo, onSaved: (_) {}),
+    ));
+
+    final textField = tester.widget<TextField>(find.byType(TextField).first);
+
+    expect(textField.style?.fontFamily, 'Lora');
+  });
 }

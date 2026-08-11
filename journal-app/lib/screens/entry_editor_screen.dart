@@ -6,6 +6,7 @@ import '../data/photo_repository.dart';
 import '../models/journal_entry.dart';
 import '../models/photo_asset.dart';
 import '../photos/photo_bytes_store.dart';
+import '../theme/app_theme.dart';
 
 const _moodOptions = [
   (1, '😞'),
@@ -140,9 +141,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
                       emoji,
                       style: TextStyle(
                         fontSize: 22,
-                        backgroundColor: _mood == value
-                            ? Theme.of(context).colorScheme.primaryContainer
-                            : null,
+                        backgroundColor: _mood == value ? AppColors.tagBackground : null,
                       ),
                     ),
                   ),
@@ -151,6 +150,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
             TextField(
               controller: _textController,
               maxLines: null,
+              style: journalTextStyle,
               decoration: const InputDecoration(hintText: "What's on your mind today?"),
             ),
             const SizedBox(height: 12),
