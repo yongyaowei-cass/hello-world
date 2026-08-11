@@ -116,4 +116,37 @@ void main() {
 
     expect(find.byIcon(Icons.cloud_off), findsOneWidget);
   });
+
+  testWidgets('groups entries under date headers', (tester) async {
+    // Real Hive I/O (repo.save) directly inside a testWidgets body must run
+    // inside runAsync, per this project's established async-widget-test
+    // pattern (testWidgets runs in a fake-async zone that never drives real
+    // dart:io/Hive completions on its own — see the neighboring tests in
+    // this file and entry_editor_screen_test.dart for the same pattern).
+    final today = DateTime.now();
+    final oldDate = today.subtract(const Duration(days: 10));
+    await tester.runAsync(() async {
+      await repo.save(JournalEntry(
+        id: 'e1',
+        createdAt: today,
+        updatedAt: today,
+        text: 'Todays entry',
+      ));
+      await repo.save(JournalEntry(
+        id: 'e2',
+        createdAt: oldDate,
+        updatedAt: oldDate,
+        text: 'Older entry',
+      ));
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntryListScreen(repository: repo, onCreateEntry: () {}, onOpenEntry: (_) {}),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Todays entry'), findsOneWidget);
+    expect(find.text('Older entry'), findsOneWidget);
+  });
 }
