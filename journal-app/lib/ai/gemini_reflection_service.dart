@@ -12,14 +12,23 @@ class GeminiReflectionService {
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   Future<String> reflect(String entryText) async {
-    final uri = Uri.parse(_endpoint).replace(queryParameters: {'key': apiKey});
+    final uri = Uri.parse(_endpoint);
     final prompt =
         'You are a gentle journaling companion. In one short sentence, '
         'ask a single reflective follow-up question about this journal entry:\n\n$entryText';
 
     final response = await _httpClient.post(
       uri,
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        // Google's newer "auth key" API keys (the default for keys created
+        // via Google AI Studio since 2026) are rejected with API_KEY_INVALID
+        // when passed as the legacy `?key=` query parameter -- the header is
+        // both the currently-documented approach and the only one these
+        // newer keys actually accept. Classic keys accept the header too, so
+        // this isn't a platform/key-type branch, just always use the header.
+        'x-goog-api-key': apiKey,
+      },
       body: jsonEncode({
         'contents': [
           {

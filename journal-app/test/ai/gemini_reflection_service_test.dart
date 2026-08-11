@@ -30,7 +30,7 @@ void main() {
     final question = await service.reflect('Started sketching the journal app today.');
 
     expect(question, 'What part of the plan excites you most?');
-    expect(captured.url.queryParameters['key'], 'test-key');
+    expect(captured.headers['x-goog-api-key'], 'test-key');
     final body = jsonDecode(captured.body) as Map;
     final promptText =
         body['contents'][0]['parts'][0]['text'] as String;
