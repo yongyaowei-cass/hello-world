@@ -22,6 +22,7 @@ import 'sync/google_drive_photo_store.dart';
 import 'sync/photo_meta_sync_service.dart';
 import 'sync/photo_sync_service.dart';
 import 'sync/sync_service.dart';
+import 'theme/app_theme.dart';
 
 // Free tier, no credit card required: https://console.groq.com
 const _groqApiKey = String.fromEnvironment('GROQ_API_KEY');
@@ -309,6 +310,7 @@ class _JournalAppState extends State<JournalApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Journal',
+      theme: appTheme,
       home: Builder(
         builder: (context) {
           if (_checkingSilentSignIn) {
